@@ -142,3 +142,12 @@ public struct HistoryEntry: Codable, Sendable {
     public let action: String, outcome: String
     public init(action: String, outcome: String) { self.action = action; self.outcome = outcome }
 }
+
+public enum InsertionSafety {
+    public static func validate(_ text: String) throws {
+        guard !text.isEmpty, text.utf16.count <= 2000 else { throw VoiceError("Please dictate a shorter nonempty text passage.") }
+        guard text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.union(.newlines).contains($0) }) else {
+            throw VoiceError("Text insertion cannot contain Return, Tab, or control characters. Request Enter separately and confirm it.")
+        }
+    }
+}

@@ -77,7 +77,7 @@ final class AccessibilityReader: @unchecked Sendable {
             throw VoiceError("No accessible foreground window. Open an application window and try again.")
         }
         let focused = Self.focusedElement(pid)
-        let secureFocus = focused.map(Self.secure) ?? true
+        let secureFocus = focused.map(Self.secure) ?? false
         var nodes: [(AXUIElement,Int)] = [(window,0)], visited = Set<CFHashCode>()
         var controls: [Control] = [], refs: [String: AXUIElement] = [:], regions: [Rect] = []
         var focusedID: String?, webArea = false, count = 0

@@ -48,7 +48,7 @@ Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** 
 
 For corrections, say **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
 
-For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command. Typing inserts at the cursor; it does not silently clear existing contents. Longer prose generation is not implemented.
+For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command. Typing inserts at the cursor; it does not silently clear existing contents. Newlines, tabs, and control characters are refused; request Enter separately and confirm it. Longer prose generation is not implemented.
 
 Sensitive actions pause and show the proposed action. Say **confirm / bevestig** or use the Confirm button. **Cancel / annuleer**, another command, a changed target, Stop, or 25 seconds of inactivity invalidates confirmation. Visual clicks, Enter/submission, and closing tabs always require confirmation. The app stops when uncertainty, repeated actions, or execution limits prevent safe progress.
 
@@ -56,7 +56,7 @@ Sensitive actions pause and show the proposed action. Say **confirm / bevestig**
 
 - Voice audio is processed locally. Transcripts, screenshots, and bounded AX context go to TypeSafe during ordinary decisions. Explicit dictation inserts locally.
 - Screenshots and private document content are not saved to persistent logs. Keychain stores the API key; preferences store consent. Local model files are cached by FluidAudio. Diagnostics show only timings, token usage, and estimated direct API cost; transcript feedback stays in memory.
-- Known secure AX fields are masked, secure/unknown focused fields block control, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
+- Known secure AX fields are masked, secure focus blocks control, unknown text focus blocks typing, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
 - The app controls the foreground window on the display with the largest overlap. A window spanning displays is cropped to one display; offscreen controls require scrolling or moving the window. Moving/resizing/switching windows during a decision causes re-observation or a safe stop.
 - Chrome's AX tree is incomplete on some sites, dense tab strips, canvas apps, rich editors, and loading pages. Vision remains first-class. Google Docs, Gmail, Miro, and actual Chrome end-to-end flows still need manual validation.
 - Automatic OCR, target zoom refinement, background-window control, Intel support, and optional Codex text generation are later milestones. No shell or arbitrary code execution is exposed to Jev.

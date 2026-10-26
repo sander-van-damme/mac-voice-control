@@ -144,6 +144,8 @@ public struct JevRequest: Sendable {
                 let id = try selected("text")
                 guard id.hasPrefix("t"), let i = Int(id.dropFirst()), candidates.texts.indices.contains(i) else { throw VoiceError("Please quote the exact text to type.") }
                 result.text = candidates.texts[i]
+                try InsertionSafety.validate(candidates.texts[i])
+                result.label = "Type ‘\(candidates.texts[i].prefix(80))’ into \(control.label)"
             }
         case .visualClick:
             guard try response.probability("present") >= 0.95,
@@ -211,7 +213,8 @@ public final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Send
             guard let http = response as? HTTPURLResponse else { throw VoiceError("TypeSafe returned no HTTP response.") }
             if http.statusCode == 200 { return try JevResponse.decode(data) }
             if [429,502,503,504].contains(http.statusCode), attempt < 2 {
-                let delay = min(5,max(0.2,Double(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? pow(2,Double(attempt))))
+                let delay = Self.retryDelay(http.value(forHTTPHeaderField:"Retry-After"),attempt:attempt)
+                guard delay <= 5 else { throw VoiceError("TypeSafe requested a longer pause. Please try again later.") }
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)); continue
             }
             switch http.statusCode {
@@ -222,5 +225,14 @@ public final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Send
             }
         }
         throw VoiceError("TypeSafe is unavailable.")
+    }
+    public static func retryDelay(_ header: String?, attempt: Int, now: Date = Date()) -> Double {
+        if let header {
+            if let seconds = Double(header), seconds.isFinite { return max(0.2,seconds) }
+            let format = DateFormatter(); format.locale = Locale(identifier:"en_US_POSIX")
+            format.timeZone = TimeZone(secondsFromGMT:0); format.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+            if let date = format.date(from:header) { return max(0.2,date.timeIntervalSince(now)) }
+        }
+        return pow(2,Double(min(max(attempt,0),2)))
     }
 }

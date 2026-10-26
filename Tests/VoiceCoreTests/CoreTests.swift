@@ -138,6 +138,12 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(Action(.visualClick,label:"unknown icon").requiresConfirmation)
         XCTAssertTrue(Action(.click,label:"Verwijderen").requiresConfirmation)
     }
+    func testDictationCannotSmuggleSubmissionOrFocusKeys() throws {
+        XCTAssertThrowsError(try InsertionSafety.validate("send this\n"))
+        XCTAssertThrowsError(try InsertionSafety.validate("hello\tpassword"))
+        XCTAssertThrowsError(try InsertionSafety.validate("hello\u{2028}world"))
+        XCTAssertNoThrow(try InsertionSafety.validate("Hello, hoe gaat het? 👋"))
+    }
     func testDoneRequiresIndependentCompletionEvidence() throws {
         let q = try request()
         XCTAssertThrowsError(try q.action(from:response(q,operation:"done",complete:0.5),observation:observation()))
@@ -190,6 +196,12 @@ final class CoreTests: XCTestCase {
     }
 }
 @MainActor final class LoopTests: XCTestCase {
+    func testRateLimitHonorsServerDelayWithoutClampingItDown() async {
+        XCTAssertEqual(JevClient.retryDelay("120",attempt:0),120)
+        XCTAssertEqual(JevClient.retryDelay(nil,attempt:1),2)
+        let date = Date(timeIntervalSince1970:0)
+        XCTAssertEqual(JevClient.retryDelay("Thu, 01 Jan 1970 00:01:00 GMT",attempt:0,now:date),60)
+    }
     func testMultiStepRealLoopObservesWorldAfterEachAction() async throws {
         let world = World(), decider = ScriptedDecider(["click","click","done"])
         let loop = GoalLoop(desktop:world,decider:decider)

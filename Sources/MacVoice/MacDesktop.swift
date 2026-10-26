@@ -34,11 +34,9 @@ import VoiceCore
         let ax = try await reader.read(pid:app.processIdentifier,chromium:chromium)
         try Task.checkCancellation()
         let axTime = (ProcessInfo.processInfo.systemUptime-t)*1000
-        // If security metadata is truncated, do not upload a screenshot that could contain
-        // an undiscovered secure field. The user can use a smaller/simpler window.
-        // A truncated AX tree itself isn't evidence of secrecy: mask all known secure regions
-        // and refuse all input while secure input is enabled or a secure field is focused.
-        guard !IsSecureEventInputEnabled(), !ax.secureFocus else { throw VoiceError("A secure or unknown field has focus. Move focus away from passwords before continuing.") }
+        // Mask known secure regions, refuse secure focus, and require explicit consent
+        // because an incomplete AX tree cannot identify every visually displayed secret.
+        guard !IsSecureEventInputEnabled(), !ax.secureFocus else { throw VoiceError("A secure field has focus. Move focus away from passwords before continuing.") }
         let captureStart = ProcessInfo.processInfo.systemUptime
         let screen = try await ScreenCapture.capture(window:ax.frame,redactions:ax.secureRegions)
         try Task.checkCancellation()
@@ -111,6 +109,7 @@ import VoiceCore
             guard let id = action.target, let node = ax.references[id], let focus = AccessibilityReader.focusedElement(o.pid),
                   CFEqual(node,focus), !AccessibilityReader.secure(focus), !IsSecureEventInputEnabled(), let text = action.text,
                   text.utf16.count <= 2000 else { throw VoiceError("The intended text field is no longer focused.") }
+            try InsertionSafety.validate(text)
             // Insert only; never select-all, clear a field, or touch the clipboard.
             for chunk in text.utf16.chunked(20) {
                 try Task.checkCancellation()
