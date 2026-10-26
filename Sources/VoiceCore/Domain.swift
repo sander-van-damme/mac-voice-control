@@ -82,6 +82,14 @@ public struct Control: Codable, Equatable, Sendable {
 public struct AppCandidate: Codable, Equatable, Sendable {
     public let id: String, name: String
     public init(id: String, name: String) { self.id = id; self.name = name }
+    public func mentioned(in goal: String) -> Bool {
+        let aliases = ["com.google.Chrome":"chrome", "com.apple.finder":"finder", "com.apple.Safari":"safari",
+                       "org.mozilla.firefox":"firefox", "com.microsoft.edgemac":"edge", "com.brave.Browser":"brave"]
+        return [name, aliases[id]].compactMap { $0 }.contains { value in
+            let pattern = "(?i)(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for:value) + "(?![\\p{L}\\p{N}])"
+            return goal.range(of:pattern,options:.regularExpression) != nil
+        }
+    }
 }
 
 public struct Observation: Sendable {

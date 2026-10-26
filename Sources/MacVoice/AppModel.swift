@@ -18,6 +18,8 @@ import VoiceCore
     @Published var microphone = false
     @Published var quickStop = false
     @Published var pending: String?
+    @Published var pendingImage: Data?
+    @Published var pendingMarker: Point?
     @Published var timings: [String:Double] = [:]
     @Published var tokens = 0
     @Published var estimatedCost: Double = 0
@@ -114,7 +116,8 @@ import VoiceCore
     }
     func stop() {
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
-        speech.stop(); listening = false; pending = nil; phase = .stopped; message = "Stopped. No further actions will start."
+        speech.stop(); listening = false; pending = nil; pendingImage = nil; pendingMarker = nil
+        phase = .stopped; message = "Stopped. No further actions will start."
     }
     func confirm(_ allowed: Bool) {
         if allowed { hideAndRestoreTarget() }
@@ -122,7 +125,7 @@ import VoiceCore
         Task {
             if allowed { try? await Task.sleep(nanoseconds:200_000_000) }
             guard epoch == run else { return }
-            loop?.resolveConfirmation(allowed); pending = nil
+            loop?.resolveConfirmation(allowed); pending = nil; pendingImage = nil; pendingMarker = nil
         }
     }
     private func hideAndRestoreTarget() {
@@ -185,6 +188,12 @@ import VoiceCore
     private func event(_ event: SessionEvent) {
         guard listening else { return }
         phase = event.phase; message = event.message; pending = loop?.pendingAction?.label
+        if let observation = loop?.pendingObservation, let point = loop?.pendingAction?.point {
+            pendingImage = observation.jpeg
+            let g = observation.geometry
+            pendingMarker = Point((g.content.x + (point.x-g.desktopCrop.x)/g.desktopCrop.width*g.content.width)/Double(g.pixelWidth),
+                                  (g.content.y + (point.y-g.desktopCrop.y)/g.desktopCrop.height*g.content.height)/Double(g.pixelHeight))
+        } else { pendingImage = nil; pendingMarker = nil }
         timings.merge(event.timings) { _,new in new }; tokens += event.tokens; estimatedCost += event.cost
         if event.phase == .paused { showFeedback() }
     }

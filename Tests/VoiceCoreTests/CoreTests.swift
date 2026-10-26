@@ -154,7 +154,20 @@ final class CoreTests: XCTestCase {
         XCTAssertNil(segmenter.append([Float](repeating:0,count:16000)))
         XCTAssertNil(segmenter.append([Float](repeating:0.2,count:3200)))
         XCTAssertNotNil(segmenter.append([Float](repeating:0,count:12800)))
-        XCTAssertNotNil(segmenter.append([Float](repeating:0.2,count:240000)))
+        XCTAssertNil(segmenter.append([Float](repeating:0.2,count:240000)))
+        XCTAssertNil(segmenter.append([Float](repeating:0,count:12800)))
+        XCTAssertNil(segmenter.append([Float](repeating:0.2,count:3200)))
+        XCTAssertNotNil(segmenter.append([Float](repeating:0,count:12800)))
+    }
+    func testChromeAliasIsKeptInLargeAppCatalog() {
+        let apps = (0..<80).map { AppCandidate(id:"\($0)",name:"App \($0)") } + [AppCandidate(id:"com.google.Chrome",name:"Google Chrome")]
+        XCTAssertEqual(Candidates(goal:"Open Chrome",observation:observation(),apps:apps).apps.first?.id,"com.google.Chrome")
+    }
+    func testNamedAppCannotActInDifferentForegroundApp() throws {
+        let base = observation()
+        let safari = Observation(pid:1,app:"Safari",window:base.window,controls:base.controls,geometry:base.geometry,jpeg:base.jpeg,signature:base.signature)
+        let q = try JevRequest(goal:"Click Next in Chrome",observation:safari,apps:[AppCandidate(id:"com.google.Chrome",name:"Google Chrome")],history:[])
+        XCTAssertThrowsError(try q.action(from:response(q),observation:safari))
     }
 }
 

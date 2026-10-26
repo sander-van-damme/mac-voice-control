@@ -54,11 +54,15 @@ public struct JevRequest: Sendable {
     public let body: Data
     public let candidates: Candidates
     public let choices: [String: Set<String>]
+    private let explicitlyNamedApp: AppCandidate?
     public init(goal: String, observation o: Observation, apps: [AppCandidate], history: [HistoryEntry]) throws {
         guard (280...1568).contains(o.geometry.pixelWidth), (280...1568).contains(o.geometry.pixelHeight),
               !o.jpeg.isEmpty, o.jpeg.count < 4_000_000 else { throw VoiceError("The screenshot exceeds the supported image limits.") }
         candidates = Candidates(goal: goal, observation: o, apps: apps)
         let c = candidates
+        let relevantGoal = goal.components(separatedBy:"User correction (takes priority):").last ?? goal
+        let named = c.apps.filter { $0.mentioned(in:relevantGoal) }
+        explicitlyNamedApp = named.count == 1 ? named.first : nil
         var options: [String: [String: String]] = [:]
         options["operation"] = [
             "click":"Press an observed accessibility control", "visualClick":"Click a visually identified control that AX cannot represent",
@@ -120,6 +124,10 @@ public struct JevRequest: Sendable {
         guard try response.probability("is_command") >= 0.9 else { throw VoiceError("No clear computer command was recognized.") }
         let op = try response.choice("operation", offered: choices["operation"]!)
         guard let operation = Operation(rawValue: op) else { throw VoiceError("Unsupported action.") }
+        if let named = explicitlyNamedApp, !named.mentioned(in:o.app),
+           ![.openApp,.wait,.clarify].contains(operation) {
+            throw VoiceError("\(named.name) is not the foreground app. Ask to open it first.")
+        }
         var result = Action(operation, label: operation.rawValue)
         result.sensitive = try response.probability("sensitive") >= 0.2
         func selected(_ name: String) throws -> String { try response.choice(name, offered: choices[name]!) }
@@ -148,6 +156,7 @@ public struct JevRequest: Sendable {
         case .openApp:
             let id = try selected("app")
             guard let app = candidates.apps.first(where: { $0.id == id }) else { throw VoiceError("That application was not found.") }
+            if let named = explicitlyNamedApp, app.id != named.id { throw VoiceError("The chosen app does not match the named application.") }
             result.target = app.id; result.label = "Open \(app.name)"
         case .openURL:
             let id = try selected("url")

@@ -62,6 +62,9 @@ struct MainView: View {
                 VStack(alignment:.leading,spacing:10) {
                     Label("Your confirmation is needed",systemImage:"hand.raised.fill").font(.headline)
                     Text(pending)
+                    if let data = model.pendingImage, let image = NSImage(data:data), let marker = model.pendingMarker {
+                        VisualPreview(image:image,marker:marker)
+                    }
                     Text("Say “confirm / bevestig” or “cancel / annuleer”. Expires after 25 seconds.").font(.caption).foregroundStyle(.secondary)
                     HStack { Button("Confirm") { model.confirm(true) }; Button("Cancel",role:.cancel) { model.confirm(false) } }
                 }.padding().background(.orange.opacity(0.1),in:RoundedRectangle(cornerRadius:12))
@@ -85,6 +88,21 @@ struct MainView: View {
                 }
             }
         }.padding(26).frame(width:520).onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
+    }
+}
+private struct VisualPreview: View {
+    let image: NSImage
+    let marker: Point
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = min(proxy.size.width/image.size.width,proxy.size.height/image.size.height)
+            let width = image.size.width*scale, height = image.size.height*scale
+            Image(nsImage:image).resizable().frame(width:width,height:height)
+                .overlay(alignment:.topLeading) {
+                    Image(systemName:"scope").font(.title).foregroundStyle(.red)
+                        .position(x:width*marker.x,y:height*marker.y)
+                }.frame(width:proxy.size.width,height:proxy.size.height)
+        }.frame(height:200).accessibilityLabel("Screenshot of the proposed visual click, with a red target marker")
     }
 }
 struct SetupView: View {

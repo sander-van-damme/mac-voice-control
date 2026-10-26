@@ -62,7 +62,7 @@ public struct Candidates: Sendable {
         controls = observation.controls.filter { $0.enabled && !$0.secure }
         // Goal matches first, then running/common apps; deterministic tie order.
         self.apps = Array(apps.sorted {
-            let a = goal.localizedCaseInsensitiveContains($0.name), b = goal.localizedCaseInsensitiveContains($1.name)
+            let a = $0.mentioned(in:goal), b = $1.mentioned(in:goal)
             return a != b ? a : $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }.prefix(40))
         texts = Self.spans(goal)
@@ -117,17 +117,30 @@ public struct Candidates: Sendable {
 public struct UtteranceSegmenter: Sendable {
     private var samples: [Float] = [], preRoll: [Float] = []
     private var silent = 0, voiced = 0
+    private var discardingLongUtterance = false
     public var threshold: Float = 0.012
     public init() {}
     public mutating func append(_ chunk: [Float]) -> [Float]? {
         guard !chunk.isEmpty else { return nil }
         let rms = sqrt(chunk.reduce(Float(0)) { $0 + $1*$1 } / Float(chunk.count))
+        if discardingLongUtterance {
+            silent = rms >= threshold ? 0 : silent + chunk.count
+            if silent >= 12800 { discardingLongUtterance = false; silent = 0 }
+            return nil
+        }
         if rms >= threshold {
             if samples.isEmpty { samples = preRoll; preRoll.removeAll(keepingCapacity: true) }
             samples += chunk; voiced += chunk.count; silent = 0
         } else if !samples.isEmpty { samples += chunk; silent += chunk.count }
         else { preRoll += chunk; if preRoll.count > 3200 { preRoll.removeFirst(preRoll.count-3200) } }
-        if !samples.isEmpty && (silent >= 12_800 || samples.count >= 240_000) {
+        if samples.count >= 240_000 && silent < 12800 {
+            // A length cap is not proof the speaker finished. Discard until silence,
+            // instead of executing a truncated instruction as a final transcript.
+            samples.removeAll(keepingCapacity:true); voiced = 0; silent = 0
+            discardingLongUtterance = true
+            return nil
+        }
+        if !samples.isEmpty && silent >= 12_800 {
             let result = voiced >= 1600 ? samples : nil
             samples.removeAll(keepingCapacity: true); silent = 0; voiced = 0
             return result

@@ -24,6 +24,7 @@ public struct SessionEvent: Sendable {
     private var confirmation: CheckedContinuation<Bool,Never>?
     private var confirmationTimer: Task<Void,Never>?
     public private(set) var pendingAction: Action?
+    public private(set) var pendingObservation: Observation?
     public private(set) var history: [HistoryEntry] = []
     public var onEvent: (SessionEvent) -> Void = { _ in }
     public var maxSteps = 20
@@ -35,15 +36,16 @@ public struct SessionEvent: Sendable {
     }
     public func resolveConfirmation(_ allowed: Bool) {
         confirmationTimer?.cancel(); confirmationTimer = nil
-        let c = confirmation; confirmation = nil; pendingAction = nil; c?.resume(returning: allowed)
+        let c = confirmation; confirmation = nil; pendingAction = nil; pendingObservation = nil; c?.resume(returning: allowed)
     }
     private func check(_ run: UUID) throws {
         try Task.checkCancellation()
         guard generation == run else { throw CancellationError() }
     }
-    private func confirm(_ action: Action, run: UUID) async throws -> Bool {
+    private func confirm(_ action: Action, observation: Observation, run: UUID) async throws -> Bool {
         try check(run)
         pendingAction = action
+        pendingObservation = observation
         let result = await withCheckedContinuation { continuation in
             confirmation = continuation
             confirmationTimer = Task { [weak self] in
@@ -96,7 +98,7 @@ public struct SessionEvent: Sendable {
                 throw VoiceError("That action was already attempted on this screen. Please correct the target.")
             }
             if action.requiresConfirmation {
-                guard try await confirm(action, run: run) else { throw VoiceError("Action cancelled or confirmation expired.") }
+                guard try await confirm(action, observation:o, run: run) else { throw VoiceError("Action cancelled or confirmation expired.") }
             }
             try check(run)
             guard try await desktop.isFresh(o, for: action) else {

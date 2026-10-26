@@ -42,7 +42,7 @@ Open the app you want to control, then click **Start listening**. The control wi
 - “Hey Jev, open Finder en ga naar mijn downloads.”
 - “Hey Jev, type 'Hello, hoe gaat het?' in het tekstveld.”
 
-Keep commands short and pause at the end. Ordinary speech without the wake phrase is ignored. Dutch/English code-switching is supported by the selected multilingual provider but **has not been validated on a real microphone corpus in this development environment**. Use the checklist in [testing.md](docs/testing.md) to evaluate your accent and microphone.
+Keep commands under 15 seconds and pause at the end. Longer uninterrupted utterances are discarded until silence to avoid executing a cut-off instruction. Ordinary speech without the wake phrase is ignored. Dutch/English code-switching is supported by the selected multilingual provider but **has not been validated on a real microphone corpus in this development environment**. Use the checklist in [testing.md](docs/testing.md) to evaluate your accent and microphone.
 
 Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** in the menu bar or control window. The button cancels pending decisions and stops listening. Already posted OS input cannot be recalled. Spoken stop has recognition latency; use the button if immediate cancellation matters.
 
