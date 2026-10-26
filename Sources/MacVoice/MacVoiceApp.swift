@@ -22,7 +22,7 @@ import VoiceCore
             OpenWindowButton()
             Button("Quit") { model.stop(); NSApp.terminate(nil) }
         }
-        Settings { SetupView(model:model).padding(24).frame(width:520) }
+        Settings { SetupView(model:model).padding(24).frame(width:520).onAppear { model.stop() } }
     }
 }
 final class AppDelegate: NSObject, NSApplicationDelegate {

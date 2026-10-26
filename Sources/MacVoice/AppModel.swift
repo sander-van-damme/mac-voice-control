@@ -57,7 +57,8 @@ import VoiceCore
     func refreshPermissions() {
         accessibility = AXIsProcessTrusted(); screenRecording = CGPreflightScreenCaptureAccess()
         microphone = AVCaptureDevice.authorizationStatus(for:.audio) == .authorized
-        quickStop = SFSpeechRecognizer.authorizationStatus() == .authorized
+        quickStop = SFSpeechRecognizer.authorizationStatus() == .authorized &&
+            SFSpeechRecognizer(locale:Locale(identifier:"en-US"))?.supportsOnDeviceRecognition == true
     }
     func requestAccessibility() {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String:true] as CFDictionary)
@@ -157,7 +158,7 @@ import VoiceCore
                 guard epoch == run else { return }
                 phase = .listening; message = "Goal finished. Listening for ‘Hey Jev’…"
             } catch is CancellationError { }
-            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription }
+            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
             guard epoch == run else { return }; runTask = nil; pending = nil
         }
     }
@@ -177,7 +178,7 @@ import VoiceCore
                 phase = .executing; try await desktop.execute(action,observed:observation)
                 guard epoch == run else { return }; phase = .listening; message = "Dictation inserted. Listening…"
             } catch is CancellationError { }
-            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription }
+            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
             guard epoch == run else { return }; runTask = nil
         }
     }
@@ -185,5 +186,7 @@ import VoiceCore
         guard listening else { return }
         phase = event.phase; message = event.message; pending = loop?.pendingAction?.label
         timings.merge(event.timings) { _,new in new }; tokens += event.tokens; estimatedCost += event.cost
+        if event.phase == .paused { showFeedback() }
     }
+    private func showFeedback() { NSApp.unhide(nil); NSApp.activate(ignoringOtherApps:true) }
 }
