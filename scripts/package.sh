@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 test "$(uname -s)" = Darwin
+test "$(uname -m)" = arm64
 swift build -c release --product MacVoice
 binary_dir="$(swift build -c release --show-bin-path)"
 app="dist/Mac Voice Control.app"
