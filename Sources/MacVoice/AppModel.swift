@@ -13,7 +13,9 @@ import VoiceCore
     @Published var modelProgress: Double = 0
     @Published var downloading = false
     @Published var downloadMessage = "Parakeet Ultra · Dutch + English · local processing"
-    @Published var accessibility = false, screenRecording = false, microphone = false
+    @Published var accessibility = false
+    @Published var screenRecording = false
+    @Published var microphone = false
     @Published var quickStop = false
     @Published var pending: String?
     @Published var timings: [String:Double] = [:]

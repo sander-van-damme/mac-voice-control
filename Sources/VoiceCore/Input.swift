@@ -98,6 +98,14 @@ public struct Candidates: Sendable {
                 if let r = Range(m.range(at: 1), in: bounded) { values.append(String(bounded[r])) }
             }
         }
+        // A following action clause isn't part of a search/typing payload.
+        let delimiter = #"(?i)\s+(?:(?:and|en|then|daarna)\s+(?:open|click|klik|go|ga|scroll|select|selecteer)|(?:in|into)\s+(?:the|het|de)\s+(?:text|tekst|field|veld))\b"#
+        if let re = try? NSRegularExpression(pattern:delimiter) {
+            for value in values {
+                if let match = re.firstMatch(in:value,range:NSRange(value.startIndex...,in:value)),
+                   let range = Range(match.range,in:value) { values.insert(String(value[..<range.lowerBound]),at:0) }
+            }
+        }
         let words = bounded.split(whereSeparator: \.isWhitespace).map(String.init)
         // Suffix spans let Jev choose a literal payload without a generative text helper.
         for i in 0..<min(words.count,20) { values.append(words[i...].joined(separator: " ")) }

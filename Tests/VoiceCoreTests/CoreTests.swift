@@ -104,6 +104,8 @@ final class CoreTests: XCTestCase {
     func testLiteralDutchEnglishSpansAndURLSafety() {
         let spans = Candidates.spans("Type 'Hello, hoe gaat het?' in het tekstveld")
         XCTAssertTrue(spans.contains("Hello, hoe gaat het?"))
+        XCTAssertTrue(Candidates.spans("Search for HumanEyes and open the first result").contains("HumanEyes"))
+        XCTAssertTrue(Candidates.spans("Zoek naar HumanEyes en open het eerste resultaat").contains("HumanEyes"))
         XCTAssertFalse(Candidates.safeURL("file:///etc/passwd"))
         XCTAssertFalse(Candidates.safeURL("javascript:alert(1)"))
         XCTAssertFalse(Candidates.safeURL("https://user:password@example.org"))
@@ -202,11 +204,12 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(world.actions.isEmpty)
     }
     func testConfirmationExpiryNeverExecutes() async throws {
-        let world = World(), loop = GoalLoop(desktop:World(),decider:ScriptedDecider(["visualClick"]))
-        _ = world
+        let world = World()
+        let loop = GoalLoop(desktop:world,decider:ScriptedDecider(["visualClick"]))
         loop.confirmationLifetime = 0.01
         do { try await loop.run(goal:"Click icon"); XCTFail("Expected expiry") } catch { }
         XCTAssertNil(loop.pendingAction)
+        XCTAssertTrue(world.actions.isEmpty)
     }
     func testStopClearsPendingConfirmation() async throws {
         let world = World(), decider = ScriptedDecider(["visualClick"])
@@ -223,10 +226,11 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(world.actions.isEmpty)
     }
     func testBoundedWaiting() async throws {
-        let world = World(), loop = GoalLoop(desktop:World(),decider:ScriptedDecider(["wait"]))
-        _ = world
+        let world = World()
+        let loop = GoalLoop(desktop:world,decider:ScriptedDecider(["wait"]))
         loop.maxSteps = 2
         do { try await loop.run(goal:"Wait for page"); XCTFail("Expected step limit") } catch { }
+        XCTAssertEqual(world.actions.count,2)
     }
     func testCorrectionContextIsBoundedAndPreserved() async throws {
         let world = World(), loop = GoalLoop(desktop:World(),decider:ScriptedDecider(["done"]))

@@ -241,7 +241,9 @@ https://github.com/FluidInference/FluidAudio
 Parakeet Ultra Core ML: https://huggingface.co/FluidInference/parakeet-ultra-coreml
 Upstream: https://huggingface.co/moondream/parakeet-ultra
 
-Model assets are downloaded on demand by FluidAudio and are not distributed in this repository or application bundle. Consult both model cards for their current licensing and attribution terms before redistributing weights. The application source license does not relicense model weights.
+Both model cards list **CC BY 4.0** as checked on 26 October 2026. Parakeet Ultra is by moondream; its Core ML conversion is by FluidInference. The application does not modify weights. License: https://creativecommons.org/licenses/by/4.0/ . Reviewed model revisions: Core ML 95eaa59a39d4394f047a4dc5cce480388a60d1b6; upstream 73175eb7aeb0d82f1e2a6b53b3aabc10a90bcd0b. FluidAudio currently resolves model downloads through its repository cache; these weight revisions are documented, not enforced by this app. Reproducibility across later model downloads therefore has that limitation.
+
+Model assets are downloaded on demand by FluidAudio and are not distributed in this repository or application bundle. Preserve attribution and the model license if redistributing weights. The application source license does not relicense model weights.
 
 ## Other research sources
 
