@@ -1,0 +1,12 @@
+.build/
+.swiftpm/
+.DS_Store
+dist/
+work/
+*.p12
+*.mobileprovision
+.env
+*.mlmodelc/
+*.mlpackage/
+*.wav
+*.m4a
