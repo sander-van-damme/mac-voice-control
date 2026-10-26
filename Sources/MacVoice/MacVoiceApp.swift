@@ -22,7 +22,10 @@ import VoiceCore
             OpenWindowButton()
             Button("Quit") { model.stop(); NSApp.terminate(nil) }
         }
-        Settings { SetupView(model:model).padding(24).frame(width:520).onAppear { model.stop() } }
+        Settings {
+            ScrollView { SetupView(model:model).padding(24) }
+                .frame(width:520,height:620).onAppear { model.stop() }
+        }
     }
 }
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -37,6 +40,7 @@ struct MainView: View {
     @State private var typed = ""
     @State private var diagnostics = false
     var body: some View {
+      ScrollView {
         VStack(alignment:.leading,spacing:20) {
             HStack {
                 Image(systemName:"waveform.circle.fill").font(.system(size:40)).foregroundStyle(.teal)
@@ -87,7 +91,9 @@ struct MainView: View {
                     }
                 }
             }
-        }.padding(26).frame(width:520).onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
+        }.padding(26).frame(width:520)
+      }.frame(width:520,height:680)
+        .onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
     }
 }
 private struct VisualPreview: View {
