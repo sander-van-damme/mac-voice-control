@@ -68,7 +68,7 @@ import VoiceCore
             var mono = [Float](repeating:0,count:count)
             for channel in 0..<channelCount { for i in 0..<count { mono[i] += channels[channel][i]/Float(channelCount) } }
             audioContinuation.yield(AudioChunk(samples:mono,rate:buffer.format.sampleRate,
-                sequence:sequence.next(),receivedAt:ProcessInfo.processInfo.systemUptime))
+                sequence:sequence.next(),receivedAt:MonotonicTime.now))
         }
         tapInstalled = true
         do { engine.prepare(); try engine.start() }
@@ -101,22 +101,22 @@ import VoiceCore
             guard let self else { return }
             for await utterance in utterances.stream {
                 guard !Task.isCancelled, generation == run else { return }
-                guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:ProcessInfo.processInfo.systemUptime) else {
+                guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:MonotonicTime.now) else {
                     onError("Speech was delayed. Start again and repeat your command."); return
                 }
                 onTranscribing()
-                let start = ProcessInfo.processInfo.systemUptime
+                let start = MonotonicTime.now
                 do {
                     var decoder = try TdtDecoderState()
                     let result = try await manager.transcribe(utterance.samples,decoderState:&decoder)
                     guard !Task.isCancelled, generation == run else { return }
-                    let ms = (ProcessInfo.processInfo.systemUptime-start)*1000
-                    guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:ProcessInfo.processInfo.systemUptime) else {
+                    let ms = (MonotonicTime.now-start)*1000
+                    guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:MonotonicTime.now) else {
                         onError("Transcription took too long. Start again and repeat your command."); return
                     }
                     startStopMonitor()
                     onTranscript(SpeechTranscript(text:result.text,inferenceMilliseconds:ms,
-                        endToTranscriptMilliseconds:(ProcessInfo.processInfo.systemUptime-utterance.endedAt)*1000))
+                        endToTranscriptMilliseconds:(MonotonicTime.now-utterance.endedAt)*1000))
                 } catch {
                     guard !Task.isCancelled, generation == run else { return }
                     onError("Local transcription failed. Stop and start listening to try again.")

@@ -88,9 +88,9 @@ final class AccessibilityReader: @unchecked Sendable {
         var nodes: [(AXUIElement,Int)] = [(window,0)], visited = Set<CFHashCode>()
         var controls: [Control] = [], refs: [String: AXUIElement] = [:], regions: [Rect] = []
         var focusedID: String?, webArea = false, count = 0
-        let start = ProcessInfo.processInfo.systemUptime
+        let start = MonotonicTime.now
         while let (node,depth) = nodes.popLast(), count < 450,
-              ProcessInfo.processInfo.systemUptime-start < 0.7 {
+              MonotonicTime.now-start < 0.7 {
             guard depth < 24, visited.insert(CFHash(node)).inserted else { continue }
             count += 1
             let role = Self.attribute(node,kAXRoleAttribute) as? String ?? ""

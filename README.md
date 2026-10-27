@@ -44,7 +44,7 @@ Open the app you want to control, then click **Start listening**. The control wi
 
 Keep commands under 15 seconds and pause at the end. Missing audio chunks, overly long utterances, and transcripts delayed by more than five seconds cause a visible stop; restart and repeat the full command. Ordinary speech without the wake phrase is ignored. Dutch/English code-switching is supported by the selected multilingual provider but **has not been validated on a real microphone corpus in this development environment**. Use the checklist in [testing.md](docs/testing.md) to evaluate your accent and microphone.
 
-Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** in the menu bar or control window. The button cancels pending decisions and stops listening. Already posted OS input cannot be recalled. Spoken stop has recognition latency; use the button if immediate cancellation matters.
+Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** in the menu bar or control window. The button cancels pending decisions and stops listening. Already posted OS input cannot be recalled. Spoken stop has recognition latency; use the button if immediate cancellation matters. System sleep stops the session; click Start again after waking.
 
 During a task or within 15 seconds afterward, correct it with **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. After that window, give the full command with **Hey Jev**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
 

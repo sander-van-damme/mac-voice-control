@@ -28,16 +28,16 @@ import VoiceCore
               !["com.apple.loginwindow","com.apple.SecurityAgent"].contains(app.bundleIdentifier ?? "") else {
             throw VoiceError("Bring the application you want to control to the front.")
         }
-        let t = ProcessInfo.processInfo.systemUptime
+        let t = MonotonicTime.now
         let bundle = app.bundleIdentifier ?? ""
         let chromium = ["chrome","chromium","brave","edge","electron"].contains { bundle.lowercased().contains($0) }
         let ax = try await reader.read(pid:app.processIdentifier,chromium:chromium)
         try Task.checkCancellation()
-        let axTime = (ProcessInfo.processInfo.systemUptime-t)*1000
+        let axTime = (MonotonicTime.now-t)*1000
         // Mask known secure regions, refuse secure focus, and require explicit consent
         // because an incomplete AX tree cannot identify every visually displayed secret.
         guard !IsSecureEventInputEnabled(), !ax.secureFocus else { throw VoiceError("A secure field has focus. Move focus away from passwords before continuing.") }
-        let captureStart = ProcessInfo.processInfo.systemUptime
+        let captureStart = MonotonicTime.now
         let screen = try await ScreenCapture.capture(window:ax.frame,redactions:ax.secureRegions)
         try Task.checkCancellation()
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
@@ -45,14 +45,14 @@ import VoiceCore
         var o = Observation(pid:app.processIdentifier,app:app.localizedName ?? "Application",window:ax.frame,controls:ax.controls,
             focusedID:ax.focusedID,secureFocus:ax.secureFocus,accessibilityIncomplete:ax.incomplete,
             geometry:screen.geometry,jpeg:screen.jpeg,signature:screen.signature)
-        o.timings = ["accessibility_ms":axTime,"capture_ms":(ProcessInfo.processInfo.systemUptime-captureStart)*1000]
+        o.timings = ["accessibility_ms":axTime,"capture_ms":(MonotonicTime.now-captureStart)*1000]
         if snapshots.count > 3 { snapshots.removeAll() }
         snapshots[o.id] = ax
         return o
     }
     func isFresh(_ o: Observation, for action: Action) async throws -> Bool {
         try Task.checkCancellation()
-        guard ProcessInfo.processInfo.systemUptime-o.acquiredAt < 35,
+        guard MonotonicTime.now-o.acquiredAt < 35,
               let ax = snapshots[o.id], basicGuard(o,ax:ax) else { return false }
         if action.operation == .wait { return true }
         if let id = action.target, [.click,.focus,.typeText].contains(action.operation) {

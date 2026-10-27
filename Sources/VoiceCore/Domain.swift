@@ -99,7 +99,7 @@ public struct AppCandidate: Codable, Equatable, Sendable {
 
 public struct Observation: Sendable {
     public var id = UUID()
-    public var acquiredAt = ProcessInfo.processInfo.systemUptime
+    public var acquiredAt = MonotonicTime.now
     public let pid: Int32, app: String, window: Rect
     public let controls: [Control], focusedID: String?, secureFocus: Bool, accessibilityIncomplete: Bool
     public let geometry: ImageGeometry, jpeg: Data, signature: [UInt8]

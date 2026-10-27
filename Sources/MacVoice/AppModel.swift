@@ -33,6 +33,7 @@ import VoiceCore
     private var runTask: Task<Void,Never>?, downloadTask: Task<Void,Never>?
     private var foreground: NSRunningApplication?
     private var workspaceObserver: NSObjectProtocol?
+    private var sleepObserver: NSObjectProtocol?
     private var conversation = ConversationMemory()
     private var pendingConfirmationID: UUID?
     private var commandReceivedAt: TimeInterval?
@@ -51,6 +52,9 @@ import VoiceCore
             }
         }
         refreshPermissions()
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main) { [weak self] _ in
+            Task { @MainActor in if self?.listening == true { self?.stop() } }
+        }
         speech.onTranscript = { [weak self] result in
             guard let self, self.listening else { return }
             self.timings["speech_end_to_transcript_ms"] = result.endToTranscriptMilliseconds
@@ -154,7 +158,7 @@ import VoiceCore
     private func receive(_ text: String, ms: Double) {
         guard listening else { return }
         timings["transcription_ms"] = ms; transcript = text
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = MonotonicTime.now
         switch InputRouter.route(text,final:true,confirmationPending:pending != nil,
                                  correctionAllowed:conversation.acceptsCorrection(at:now,active:runTask != nil)) {
         case .stop: stop()
@@ -172,7 +176,7 @@ import VoiceCore
     private func begin(_ goal: String, context: [HistoryEntry] = []) {
         loop?.stop(); runTask?.cancel(); clearPending(); epoch = UUID(); let run = epoch
         hideAndRestoreTarget()
-        commandReceivedAt = ProcessInfo.processInfo.systemUptime
+        commandReceivedAt = MonotonicTime.now
         commandSpeechLatency = timings["speech_end_to_transcript_ms"]
         runTask = Task { [weak self] in
             guard let self, let loop else { return }
@@ -184,7 +188,7 @@ import VoiceCore
             } catch is CancellationError { }
             catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
             guard epoch == run else { return }
-            conversation.finished(at:ProcessInfo.processInfo.systemUptime); runTask = nil; clearPending()
+            conversation.finished(at:MonotonicTime.now); runTask = nil; clearPending()
         }
     }
     private func beginDictation(_ text: String) {
@@ -219,7 +223,7 @@ import VoiceCore
         } else { pendingImage = nil; pendingMarker = nil }
         timings.merge(event.timings) { _,new in new }; tokens += event.tokens; estimatedCost += event.cost
         if event.timings["command_to_first_action_ms"] != nil, let commandReceivedAt, let commandSpeechLatency {
-            timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (ProcessInfo.processInfo.systemUptime-commandReceivedAt)*1000
+            timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (MonotonicTime.now-commandReceivedAt)*1000
         }
         if event.phase == .paused { showFeedback() }
     }

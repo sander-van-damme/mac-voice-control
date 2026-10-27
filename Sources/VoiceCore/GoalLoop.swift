@@ -34,7 +34,7 @@ public struct SessionEvent: Sendable {
     public var timeBudget: Double = 90
     public var confirmationLifetime: Double = 25
     public init(desktop: DesktopControlling, decider: Deciding,
-                clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+                clock: @escaping () -> TimeInterval = { MonotonicTime.now }) {
         self.desktop = desktop; self.decider = decider; self.clock = clock
     }
     public func stop() {
@@ -106,11 +106,11 @@ public struct SessionEvent: Sendable {
             let request = try JevRequest(goal: goal, observation: o, apps: desktop.apps, history: history)
             onEvent(SessionEvent(.deciding,"Choosing the next action…"))
             try check(run, deadline: deadline)
-            let t = ProcessInfo.processInfo.systemUptime
+            let t = MonotonicTime.now
             let response = try await decider.decide(request); try check(run, deadline: deadline)
             let action = try request.action(from: response, observation: o)
             var event = SessionEvent(.deciding,action.label)
-            event.timings = o.timings; event.timings["jev_ms"] = (ProcessInfo.processInfo.systemUptime-t)*1000
+            event.timings = o.timings; event.timings["jev_ms"] = (MonotonicTime.now-t)*1000
             event.tokens = response.usage?.input_tokens ?? 0; event.cost = response.usage?.estimatedCostUSD ?? 0
             onEvent(event)
             if action.operation == .done {
@@ -140,10 +140,10 @@ public struct SessionEvent: Sendable {
             onEvent(SessionEvent(.executing,action.label))
             try check(run, deadline: deadline)
             guard clock() < consentDeadline else { throw VoiceError("Confirmation expired while checking the target. Please repeat the command.") }
-            let actionStart = ProcessInfo.processInfo.systemUptime
+            let actionStart = MonotonicTime.now
             try await desktop.execute(action, observed: o); try check(run, deadline: deadline)
             var executed = SessionEvent(.executing,action.label)
-            executed.timings["action_ms"] = (ProcessInfo.processInfo.systemUptime-actionStart)*1000
+            executed.timings["action_ms"] = (MonotonicTime.now-actionStart)*1000
             if attempts.isEmpty { executed.timings["command_to_first_action_ms"] = (clock()-started)*1000 }
             onEvent(executed)
             attempts.append((o,action.fingerprint)); previous = o; previousAction = action

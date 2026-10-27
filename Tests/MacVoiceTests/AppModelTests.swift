@@ -1,5 +1,6 @@
 import XCTest
 import Combine
+import AppKit
 import VoiceCore
 @testable import MacVoice
 
@@ -20,6 +21,17 @@ import VoiceCore
 }
 
 @MainActor final class AppModelTests: XCTestCase {
+    func testSleepStopsSessionAndRequiresExplicitRestart() async {
+        let speech = FakeSpeech()
+        let tested = AppModel(speech:speech,hasKey:{ false })
+        tested.listening = true
+        let stopped = expectation(description:"Sleep stopped listening")
+        let subscription = tested.$listening.dropFirst().filter { !$0 }.sink { _ in stopped.fulfill() }
+        NSWorkspace.shared.notificationCenter.post(name:NSWorkspace.willSleepNotification,object:nil)
+        await fulfillment(of:[stopped],timeout:3)
+        XCTAssertFalse(tested.listening); XCTAssertEqual(tested.phase,.stopped); XCTAssertEqual(speech.stops,1)
+        withExtendedLifetime(subscription) {}
+    }
     func testDownloadSuccessUpdatesActualSetupModelWithoutNetwork() async throws {
         let speech = FakeSpeech()
         let tested = AppModel(speech:speech,hasKey:{ false })
