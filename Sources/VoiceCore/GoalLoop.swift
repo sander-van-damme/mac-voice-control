@@ -8,7 +8,7 @@ import Foundation
 }
 public enum SessionPhase: String, Sendable {
     case stopped = "Stopped", listening = "Listening", transcribing = "Transcribing", observing = "Observing"
-    case deciding = "Deciding", executing = "Executing", paused = "Paused", completed = "Completed", failed = "Needs attention"
+    case deciding = "Deciding", assisting = "Language assistance", executing = "Executing", paused = "Paused", completed = "Completed", failed = "Needs attention"
 }
 public struct SessionEvent: Sendable {
     public let phase: SessionPhase, message: String
@@ -20,6 +20,8 @@ public struct SessionEvent: Sendable {
 
 @MainActor public final class GoalLoop {
     private let desktop: DesktopControlling, decider: Deciding
+    private let language: (any LanguageHelping)?
+    private let languageScreenContext: Bool
     private var generation = UUID()
     private var confirmation: CheckedContinuation<Bool,Never>?
     private var confirmationTimer: Task<Void,Never>?
@@ -33,9 +35,11 @@ public struct SessionEvent: Sendable {
     public var maxSteps = 20
     public var timeBudget: Double = 90
     public var confirmationLifetime: Double = 25
-    public init(desktop: DesktopControlling, decider: Deciding,
+    public init(desktop: DesktopControlling, decider: Deciding, language: (any LanguageHelping)? = nil,
+                languageScreenContext: Bool = false,
                 clock: @escaping () -> TimeInterval = { MonotonicTime.now }) {
         self.desktop = desktop; self.decider = decider; self.clock = clock
+        self.language = language; self.languageScreenContext = languageScreenContext
     }
     public func stop() {
         generation = UUID(); finishConfirmation(false)
@@ -91,6 +95,8 @@ public struct SessionEvent: Sendable {
         let started = clock(), deadline = started+timeBudget
         var previous: Observation?, previousAction: Action?, noChanges = 0, waits = 0, stale = 0
         var attempts: [(Observation,String)] = []
+        var preparedTexts: [String] = [], languageCalls = 0
+        var preparationAttempted = false
         for _ in 0..<maxSteps {
             try check(run, deadline: deadline)
             onEvent(SessionEvent(.observing,"Looking at the current window…"))
@@ -103,16 +109,54 @@ public struct SessionEvent: Sendable {
                 history = Array(history.suffix(6))
             }
             guard noChanges < 3 else { throw VoiceError("The screen is not changing. I stopped to avoid repeating actions.") }
-            let request = try JevRequest(goal: goal, observation: o, apps: desktop.apps, history: history)
+            // Text is prepared once. Observe again after helper latency before selecting a target.
+            if let language, !preparationAttempted, LanguageRouting.canGenerate(goal) {
+                preparationAttempted = true; languageCalls += 1
+                onEvent(SessionEvent(.assisting,"Preparing the requested text…")); try check(run,deadline:deadline)
+                let request = LanguageRequest(goal:goal,mode:.prepareText,observation:o,apps:desktop.apps,
+                    history:history,includeScreen:languageScreenContext)
+                let reply = try await language.assist(request); try check(run,deadline:deadline)
+                try reply.validate(for:request)
+                guard reply.kind == .text, let text = reply.text else {
+                    throw VoiceError(reply.message.isEmpty ? "Please specify the text you want written." : reply.message)
+                }
+                preparedTexts = [text]; previous = nil; previousAction = nil
+                continue
+            }
+            let request = try JevRequest(goal: goal, observation: o, apps: desktop.apps, history: history,
+                preparedTexts:preparedTexts,languageAvailable:language != nil && languageCalls < 3)
             onEvent(SessionEvent(.deciding,"Choosing the next action…"))
             try check(run, deadline: deadline)
             let t = MonotonicTime.now
             let response = try await decider.decide(request); try check(run, deadline: deadline)
-            let action = try request.action(from: response, observation: o)
+            var action: Action
+            do { action = try request.action(from: response, observation: o) }
+            catch is DecisionUncertainty where language != nil && languageCalls < 3 {
+                action = Action(.requestLanguage,label:"Resolve the uncertain next step")
+            }
+            catch is LanguageNeeded where language != nil && languageCalls < 3 {
+                action = Action(.requestLanguage,label:"Prepare the exact insertion text")
+            }
             var event = SessionEvent(.deciding,action.label)
             event.timings = o.timings; event.timings["jev_ms"] = (MonotonicTime.now-t)*1000
             event.tokens = response.usage?.input_tokens ?? 0; event.cost = response.usage?.estimatedCostUSD ?? 0
             onEvent(event)
+            if action.operation == .requestLanguage || (action.operation == .clarify && language != nil && languageCalls < 3) {
+                guard let language, languageCalls < 3 else { throw VoiceError("Language assistance limit reached. Please give a smaller command.") }
+                languageCalls += 1
+                onEvent(SessionEvent(.assisting,"Getting help with the next step…")); try check(run,deadline:deadline)
+                let help = LanguageRequest(goal:goal,mode:.nextAction,observation:o,apps:desktop.apps,
+                    history:history,includeScreen:languageScreenContext,preparedTexts:preparedTexts)
+                let reply = try await language.assist(help); try check(run,deadline:deadline)
+                try reply.validate(for:help)
+                switch reply.kind {
+                case .text:
+                    preparedTexts = [reply.text!]; previous = nil; previousAction = nil
+                    continue
+                case .action: action = try reply.action!.resolve(for:help)
+                case .clarify: throw VoiceError(reply.message.isEmpty ? "Please clarify the requested action." : reply.message)
+                }
+            }
             if action.operation == .done {
                 guard try await desktop.isFresh(o,for:action) else { continue }
                 try check(run, deadline: deadline); onEvent(SessionEvent(.completed,"The goal appears complete.")); return

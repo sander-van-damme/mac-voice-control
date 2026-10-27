@@ -6,7 +6,8 @@ import VoiceCore
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene {
         WindowGroup("Mac Voice Control",id:"main") {
-            MainView(model:model).onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)) { _ in model.stop() }
+            MainView(model:model).onAppear { delegate.model = model }
+                .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)) { _ in model.shutdown() }
         }
         .defaultSize(width:520,height:600)
         .windowResizability(.contentSize)
@@ -20,7 +21,7 @@ import VoiceCore
                 Button("Cancel action") { model.confirm(false) }
             }
             OpenWindowButton()
-            Button("Quit") { model.stop(); NSApp.terminate(nil) }
+            Button("Quit") { model.shutdown(); NSApp.terminate(nil) }
         }
         Settings {
             ScrollView { SetupView(model:model).padding(24) }
@@ -28,7 +29,11 @@ import VoiceCore
         }
     }
 }
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var model: AppModel?
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        model?.shutdown(); return .terminateNow
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication) -> Bool { false }
 }
 private struct OpenWindowButton: View {
@@ -87,7 +92,7 @@ struct MainView: View {
                     Text("For troubleshooting. Voice commands use the same decision loop.").font(.caption)
                     if !model.timings.isEmpty {
                         Text(model.timings.sorted(by:{$0.key < $1.key}).map { "\($0.key): \(Int($0.value)) ms" }.joined(separator:" · ")).font(.caption2).textSelection(.enabled)
-                        Text("\(model.tokens) input tokens · estimated $\(model.estimatedCost,specifier:"%.6f")").font(.caption2)
+                        Text("TypeSafe: \(model.tokens) input tokens · estimated $\(model.estimatedCost,specifier:"%.6f")").font(.caption2)
                     }
                 }
             }
@@ -97,9 +102,10 @@ struct MainView: View {
         .onExitCommand { model.stop() }
     }
 }
-private struct VisualPreview: View {
+struct VisualPreview: View {
     let image: NSImage
     let marker: Point
+    var height: CGFloat = 200
     var body: some View {
         GeometryReader { proxy in
             let scale = min(proxy.size.width/image.size.width,proxy.size.height/image.size.height)
@@ -109,7 +115,7 @@ private struct VisualPreview: View {
                     Image(systemName:"scope").font(.title).foregroundStyle(.red)
                         .position(x:width*marker.x,y:height*marker.y)
                 }.frame(width:proxy.size.width,height:proxy.size.height)
-        }.frame(height:200).accessibilityLabel("Screenshot of the proposed visual click, with a red target marker")
+        }.frame(height:height).accessibilityLabel("Screenshot of the proposed visual click, with a red target marker")
     }
 }
 struct SetupView: View {
@@ -118,6 +124,8 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             Text("Setup").font(.headline)
+            ChatGPTSetupView(model:model,account:model.chatGPT)
+            Divider()
             HStack {
                 SecureField(model.keySaved ? "Replace TypeSafe API key" : "TypeSafe API key",text:$apiKey)
                 Button("Save") { model.saveKey(apiKey); apiKey = "" }.disabled(apiKey.trimmingCharacters(in:.whitespaces).isEmpty)

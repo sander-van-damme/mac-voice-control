@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import AVFoundation
 import Speech
 import VoiceCore
@@ -24,6 +25,13 @@ import VoiceCore
     @Published var tokens = 0
     @Published var estimatedCost: Double = 0
     @Published var setupVisible = false
+    let chatGPT = ChatGPTAccount()
+    @Published var languageEnabled = UserDefaults.standard.bool(forKey:"languageEnabled") {
+        didSet { UserDefaults.standard.set(languageEnabled,forKey:"languageEnabled"); stop() }
+    }
+    @Published var languageScreenContext = UserDefaults.standard.bool(forKey:"languageScreenContext") {
+        didSet { UserDefaults.standard.set(languageScreenContext,forKey:"languageScreenContext"); stop() }
+    }
     @Published var consent = UserDefaults.standard.bool(forKey:"screenConsent") {
         didSet { UserDefaults.standard.set(consent,forKey:"screenConsent"); if !consent { stop() } }
     }
@@ -39,6 +47,7 @@ import VoiceCore
     private var commandReceivedAt: TimeInterval?
     private var commandSpeechLatency: Double?
     private var epoch = UUID()
+    private var overlay: StatusOverlay?
     init(speech provider: SpeechProviding? = nil, hasKey: () throws -> Bool = { try KeyStore.read() != nil }) {
         self.speech = provider ?? LocalSpeech()
         let speech = self.speech
@@ -67,6 +76,7 @@ import VoiceCore
         speech.onTranscribing = { [weak self] in
             guard let self, self.listening, self.runTask == nil else { return }; self.phase = .transcribing
         }
+        if provider == nil, UserDefaults.standard.bool(forKey:"speechModelPreviouslyLoaded") { downloadModel() }
     }
     var ready: Bool { keySaved && consent && modelReady && accessibility && screenRecording && microphone }
     func refreshPermissions() {
@@ -108,6 +118,7 @@ import VoiceCore
                 }
                 try Task.checkCancellation()
                 modelReady = true; downloadMessage = "Local speech model ready."; modelProgress = 1
+                UserDefaults.standard.set(true,forKey:"speechModelPreviouslyLoaded")
             } catch is CancellationError { downloadMessage = "Download cancelled. You can retry; completed files are cached." }
             catch { downloadMessage = "Could not prepare the model. Check your connection and retry. Cached files will be checked." }
             downloading = false; downloadTask = nil
@@ -121,11 +132,16 @@ import VoiceCore
         do {
             guard let key = try KeyStore.read(), !key.isEmpty else { throw VoiceError("Save your TypeSafe key first.") }
             let desktop = MacDesktop(); self.desktop = desktop
-            let loop = GoalLoop(desktop:desktop,decider:JevClient(key:key)); self.loop = loop
+            let helper: (any LanguageHelping)? = languageEnabled && chatGPT.connected
+                ? OpenAILanguageHelper(auth:chatGPT.auth,model:chatGPT.model) : nil
+            if languageEnabled && helper == nil { throw VoiceError("Connect ChatGPT in Setup or turn off language assistance.") }
+            let loop = GoalLoop(desktop:desktop,decider:JevClient(key:key),language:helper,
+                languageScreenContext:languageScreenContext); self.loop = loop
             loop.onEvent = { [weak self] event in self?.event(event) }
             try speech.start(); listening = true; phase = .listening
             message = "Say ‘Hey Jev’ followed by a command. Say ‘stop’ to stop."
             hideAndRestoreTarget()
+            showStatus()
         } catch { phase = .failed; message = error.localizedDescription }
     }
     func stop() {
@@ -134,6 +150,7 @@ import VoiceCore
         pendingConfirmationID = nil; conversation.clear()
         transcript = ""; loop = nil; desktop = nil; commandReceivedAt = nil
         phase = .stopped; message = "Stopped. No further actions will start."
+        overlay?.hide()
     }
     func confirm(_ allowed: Bool) {
         guard let id = pendingConfirmationID, let loop else { return }
@@ -147,8 +164,12 @@ import VoiceCore
         }
     }
     private func hideAndRestoreTarget() {
-        NSApp.hide(nil)
-        foreground?.activate(options:[])
+        guard let app = NSApp else { return }
+        // Only close setup/control windows. Hiding the application would hide the overlay too.
+        app.windows.filter { !($0 is NSPanel) }.forEach { $0.orderOut(nil) }
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            foreground?.activate(options:[])
+        }
     }
     func submitTyped(_ goal: String) {
         guard listening else { return }
@@ -225,10 +246,20 @@ import VoiceCore
         if event.timings["command_to_first_action_ms"] != nil, let commandReceivedAt, let commandSpeechLatency {
             timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (MonotonicTime.now-commandReceivedAt)*1000
         }
-        if event.phase == .paused { showFeedback() }
+        showStatus()
     }
     private func showFeedback() {
-        guard let app = NSApp else { return }; app.unhide(nil); app.activate(ignoringOtherApps:true)
+        if setupVisible || !ready, let app = NSApp {
+            app.unhide(nil); app.activate(ignoringOtherApps:true)
+        } else { showStatus() }
+    }
+    private func showStatus() {
+        guard NSApp != nil else { return }
+        if overlay == nil { overlay = StatusOverlay(model:self) }
+        overlay?.show()
+    }
+    func shutdown() {
+        stop(); cancelDownload(); chatGPT.cancelSignIn()
     }
     private func clearPending() {
         pending = nil; pendingImage = nil; pendingMarker = nil; pendingConfirmationID = nil

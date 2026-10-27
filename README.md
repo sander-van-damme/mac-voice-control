@@ -1,6 +1,6 @@
 # Mac Voice Control
 
-A native macOS assistant for Dutch, English, and mixed spoken computer commands. Local Parakeet Ultra transcribes your voice; TypeSafe Jev 1.14 chooses the next supported action using a current screenshot and supplementary Accessibility information. Ordinary multi-step navigation does not use a generative planner.
+A native macOS assistant for Dutch, English, and mixed spoken computer commands. Local Parakeet Ultra transcribes your voice; TypeSafe Jev 1.14 chooses the next supported action using a current screenshot and supplementary Accessibility information. Optional ChatGPT language assistance prepares text and proposes difficult next steps. Every computer action is executed and checked by this application.
 
 **Experimental development software.** Jev's image/Box API is experimental. Compilation and automated policy tests do not establish reliable desktop control or mixed-language recognition. See [validation status](docs/testing.md) before using it with important work.
 
@@ -29,11 +29,17 @@ No speech models are included in the repository or DMG. Do not mistake a source 
 4. Select **Download / load local speech model**. The GUI shows file progress and model preparation. If it fails, retry; completed files are cached. Ultra's encoder alone is approximately 595 MB. Preparing Core ML assets can take longer than downloading the final file.
 5. Optionally enable **faster spoken stop**. This uses Apple's on-device English recognizer when supported; it never falls back to Apple's servers. Main local recognition also handles Dutch/English cancellation.
 
-After relaunch, choose **Download / load** again to load the cached model. You do not need to download completed assets again.
+After the first successful model load in this version, subsequent launches automatically prepare the cached model. This does not start microphone listening. On first use or after an unsuccessful preparation, use **Download / load** to retry; cached files are reused.
+
+### Optional ChatGPT language assistance
+
+In Setup, choose **Continue with ChatGPT**, complete browser sign-in, and authorize ChatGPT plan usage. Select an available model and enable **Use ChatGPT for language assistance**. GPT-6 Luna is the initial preference; model access depends on your account. No Codex CLI, OpenAI API key, or local LLM download is required. If you decline plan usage, Jev and local speech remain available with language assistance off.
+
+Commands and recent action outcomes go to OpenAI when assistance is needed. **Share screen context with ChatGPT** separately enables screenshot and bounded Accessibility context, needed for requests about visible content. Audio stays local. Requests use your ChatGPT plan limits. Credentials are stored in this Mac's Keychain. See [language assistance](docs/language-assistance.md) for behavior, cancellation, and validation limits.
 
 ## Use it
 
-Open the app you want to control, then click **Start listening**. The control window hides and the menu-bar icon remains available. Begin each command with **Hey Jev**. The recognition variant **Hey Jeff** is accepted.
+Open the app you want to control, then click **Start listening**. The control window hides; a nonactivating overlay shows the recognized command, status, confirmations, and **Stop**. It stays above other apps without taking keyboard focus. The menu-bar controls remain available. Begin each command with **Hey Jev**. The recognition variant **Hey Jeff** is accepted.
 
 - “Hey Jev, open Chrome.”
 - “Hey Jev, open een nieuw tabblad en ga naar GitHub.”
@@ -48,18 +54,18 @@ Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** 
 
 During a task or within 15 seconds afterward, correct it with **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. After that window, give the full command with **Hey Jev**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
 
-For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command. Typing inserts at the cursor; it does not silently clear existing contents. Newlines, tabs, and control characters are refused; request Enter separately and confirm it. Longer prose generation is not implemented.
+For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command, and bypasses the language helper. Typing inserts at the cursor; it does not silently clear existing contents. With ChatGPT assistance enabled, requests such as **“Hey Jev, write a short greeting in Dutch in this field”** prepare text for Jev to insert. Each insertion is limited to 2,000 UTF-16 units. Newlines, tabs, and control characters are refused; request Enter separately and confirm it.
 
 Sensitive actions pause and show the proposed action. Say **confirm / bevestig** or use the Confirm button. **Cancel / annuleer**, another command, a changed target, Stop, or 25 seconds of inactivity invalidates confirmation. Visual clicks, Enter/submission, and closing tabs always require confirmation. The app stops when uncertainty, repeated actions, or execution limits prevent safe progress.
 
 ## Privacy and limitations
 
-- Voice audio is processed locally. Transcripts, screenshots, and bounded AX context go to TypeSafe during ordinary decisions. Explicit dictation inserts locally.
+- Voice audio is processed locally. Transcripts, screenshots, and bounded AX context go to TypeSafe during ordinary decisions. Optional language assistance sends commands and recent action outcomes to OpenAI; screenshots and AX controls require its separate screen-context setting. Explicit dictation inserts locally.
 - Screenshots and private document content are not saved to persistent logs. Keychain stores the API key; preferences store consent. Local model files are cached by FluidAudio. Diagnostics show only timings, token usage, and estimated direct API cost; transcript feedback stays in memory.
 - Known secure AX fields are masked, secure focus blocks control, unknown text focus blocks typing, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
 - The app controls the foreground window on the display with the largest overlap. A window spanning displays is cropped to one display; offscreen controls require scrolling or moving the window. Moving/resizing/switching windows during a decision causes re-observation or a safe stop.
 - Chrome's AX tree is incomplete on some sites, dense tab strips, canvas apps, rich editors, and loading pages. Vision remains first-class. Google Docs, Gmail, Miro, and actual Chrome end-to-end flows still need manual validation.
-- Automatic OCR, target zoom refinement, background-window control, Intel support, and optional Codex text generation are later milestones. No shell or arbitrary code execution is exposed to Jev.
+- Automatic OCR, target zoom refinement, background-window control, Intel support, global voice shortcuts, Touch Bar controls, and wake-free listening are later milestones. No shell or arbitrary code execution is exposed to either model.
 - Confidence gates and safety classification reduce risk but do not establish correctness. This is supervised experimental software.
 
 ## Troubleshooting
