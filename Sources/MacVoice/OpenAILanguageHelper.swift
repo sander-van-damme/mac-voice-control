@@ -4,9 +4,12 @@ import VoiceCore
 struct OpenAILanguageHelper: LanguageHelping {
     let auth: ChatGPTAuth
     let model: String
+    var apiKey: String? = nil
     func assist(_ request: LanguageRequest) async throws -> LanguageReply {
         let body = try OpenAIProtocol.body(for:request,model:model)
-        let token = try await auth.token(); try Task.checkCancellation()
+        let token: String
+        if let apiKey { token = apiKey } else { token = try await auth.token() }
+        try Task.checkCancellation()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 45
         let session = URLSession(configuration:config,delegate:OpenAINoRedirect(),delegateQueue:nil)
@@ -20,7 +23,7 @@ struct OpenAILanguageHelper: LanguageHelping {
             let (bytes,response) = try await session.bytes(for:http)
             guard let response = response as? HTTPURLResponse, response.statusCode == 200,
                   response.value(forHTTPHeaderField:"Content-Type")?.contains("text/event-stream") == true else {
-                throw VoiceError("ChatGPT request failed. Check sign-in, model access, and plan usage in Setup.")
+                throw VoiceError("OpenAI request failed. Check the selected authentication method, model access, and billing or plan limits in Setup.")
             }
             var stream = OpenAIEventStream(), count = 0
             for try await line in bytes.lines {
