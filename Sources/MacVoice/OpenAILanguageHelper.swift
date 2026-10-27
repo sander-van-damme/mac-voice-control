@@ -5,6 +5,7 @@ struct OpenAILanguageHelper: LanguageHelping {
     let auth: ChatGPTAuth
     let model: String
     var apiKey: String? = nil
+    var injectedSession: URLSession? = nil
     func assist(_ request: LanguageRequest) async throws -> LanguageReply {
         let body = try OpenAIProtocol.body(for:request,model:model)
         let token: String
@@ -12,7 +13,7 @@ struct OpenAILanguageHelper: LanguageHelping {
         try Task.checkCancellation()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 45
-        let session = URLSession(configuration:config,delegate:OpenAINoRedirect(),delegateQueue:nil)
+        let session = injectedSession ?? URLSession(configuration:config,delegate:OpenAINoRedirect(),delegateQueue:nil)
         defer { session.invalidateAndCancel() }
         return try await withTaskCancellationHandler {
             var http = URLRequest(url:URL(string:OpenAIProtocol.resource+"/responses")!)
