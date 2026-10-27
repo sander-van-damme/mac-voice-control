@@ -114,6 +114,9 @@ public struct JevRequest: Sendable {
         let historyJSON = try JSONSerialization.jsonObject(with: encoder.encode(Array(history.suffix(6))))
         let state: [String: Any] = ["goal":String(goal.prefix(2200)), "screenshot":ref,
             "application":o.app, "observation_id":o.id.uuidString, "focused_control":o.focusedID ?? "none",
+            "window_frame":try JSONSerialization.jsonObject(with:encoder.encode(o.window)),
+            "screenshot_geometry":try JSONSerialization.jsonObject(with:encoder.encode(o.geometry)),
+            "coordinate_note":"AX frames and window_frame are global top-left desktop points. Screenshot pixels use screenshot_geometry.content and desktopCrop; padding is not screen content.",
             "supplementary_accessibility":controlsJSON, "accessibility_incomplete":o.accessibilityIncomplete,
             "accessibility_note":"Absence from this bounded tree does not mean absence from the screenshot. Field values are omitted for privacy.",
             "history":historyJSON]
