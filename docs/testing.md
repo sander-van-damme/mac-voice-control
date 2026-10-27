@@ -6,6 +6,8 @@ Development began on Linux on 26 October 2026. Native tests/builds run on GitHub
 
 `swift test --parallel` runs the real VoiceCore module against synthetic Jev fixtures and a stateful fake desktop. No paid key, microphone, user screen, or model download is needed. Tests cover image request construction, explicit asset references/header model contract, response parsing, probability/choice validation, target presence, geometry and padding, negative display origins, Retina independence, candidate limits, secure normalization, bilingual routing, literal dictation, correction context, confirmation expiry, stale targets, cancellation after an in-flight decision, repeats, bounded waiting, independent completion evidence, and multi-step state transitions.
 
+The routing corpus in `Tests/VoiceCoreTests/Fixtures/bilingual-routing.json` includes Dutch, English, mixed commands, dictation, and negative background speech. Additional tests cover observation UUID binding, delayed consent timers, mismatched prompt IDs, consent expiry during freshness checks, cancellation at the execution boundary, audio gaps and stale transcripts. macOS-only AppModel tests inject a fake speech provider to verify download success, cancellation/retry, and late speech after Stop.
+
 Synthetic fixtures are explicitly labelled. No live response corpus was supplied and none is fabricated. The fake world runs through GoalLoop itself; it is not a replacement loop in a test.
 
 Build and release scripts validate bundle metadata, code signature integrity, and DMG integrity. Notarized builds additionally validate the staple and Gatekeeper assessment. A macOS CI runner does **not** verify TCC grants, real microphone recognition, correct clicks in Chrome, or a user's desktop behavior.
@@ -17,6 +19,8 @@ See the linked workflow run/PR for the actual result and artifact of a particula
 The `scripts/live-jev-smoke.py` script reads TYPESAFE_API_KEY from the environment and sends a generated, non-private image with simple Choice, Noul, and Box questions. It checks pinned model identity, response primitives, and image support, prints only timing/usage, and never controls the computer. This incurs API usage and is opt-in; it is not part of ordinary CI. The test checks protocol availability, not dense-screen pointing accuracy.
 
 ## Manual acceptance — real Mac required
+
+Open `Tests/Manual/desktop-fixture.html` in Chrome for disposable bilingual controls, delayed search results, a canvas-only visual button, dummy password masking, a changing target, and a Send counter. It has no network or persistent storage. This is a manual fixture, not an automated Chrome validation result.
 
 Record OS/hardware/build SHA, screen layout/scaling, microphone, ASR model, language, transcript, visible outcome, false actions, and timing. Begin with disposable files and test accounts. A checked row needs observed evidence; compilation is insufficient.
 
@@ -65,10 +69,10 @@ Compute ASR word error rate against manually transcribed audio, command success 
 
 ## Performance measurement
 
-In-memory diagnostics expose `transcription_ms`, `accessibility_ms`, `capture_ms`, `jev_ms`, `action_ms`, and `command_to_first_action_ms`, plus returned input tokens and estimated cost at $0.042/M input tokens. `transcription_ms` starts when a completed utterance enters ASR; add approximately 800 ms endpoint silence to measure speech-end latency. Audio queueing, warm/cold load, and partial-stop latency require external measurement. Core ML may finish an already-running inference after Stop, but its result is discarded.
+In-memory diagnostics expose `transcription_ms`, `speech_end_to_transcript_ms`, `accessibility_ms`, `capture_ms`, `jev_ms`, `action_ms`, and `command_to_first_action_ms`, and `speech_end_to_first_action_ms`, plus returned input tokens and estimated cost at $0.042/M input tokens. `transcription_ms` measures ASR inference. `speech_end_to_transcript_ms` also includes endpoint silence and queueing, using the local energy segmenter’s estimated speech end; it is not a sample-accurate acoustic annotation. `speech_end_to_first_action_ms` adds that speech latency to the actual elapsed time since transcript delivery, including restoring the target window; it is emitted for voice commands only. Warm/cold load and partial-stop latency still require external measurement. Core ML may finish an already-running inference after Stop, but its result is discarded.
 
 For a baseline, run 30 simple commands and 10 multi-step tasks, report p50/p95 stage and end-to-end times, successes/failures, warm/cold model state, and hardware. No actual application performance numbers are claimed before those measurements exist.
 
 ## Known gaps / release gate
 
-Real speech quality, correct ScreenCaptureKit crop orientation on multiple displays, TCC recovery, keyboard layout variations, app-specific Accessibility semantics, and calibrated visual confidence thresholds remain release gates. Energy-based segmentation is a simple baseline, not learned VAD. Screen signature sampling can miss a small local change; live AX identity/focus guards help but do not prove visual target correctness. A production release needs a real desktop validation pass and signed/notarized artifacts.
+Real speech quality, correct ScreenCaptureKit crop orientation on multiple displays, TCC recovery, keyboard layout variations, app-specific Accessibility semantics, and calibrated visual confidence thresholds remain release gates. Energy-based segmentation is a simple baseline, not learned VAD. Global screen signature sampling can miss a small local change. Visual clicks therefore also compare a color-pixel patch around the target; live AX identity/focus guards provide separate checks. Neither proves the model chose the right object. The five-second speech-age cutoff deliberately rejects slow inference rather than executing an old command. A production release needs a real desktop validation pass and signed/notarized artifacts.

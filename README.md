@@ -42,11 +42,11 @@ Open the app you want to control, then click **Start listening**. The control wi
 - “Hey Jev, open Finder en ga naar mijn downloads.”
 - “Hey Jev, type 'Hello, hoe gaat het?' in het tekstveld.”
 
-Keep commands under 15 seconds and pause at the end. Longer uninterrupted utterances are discarded until silence to avoid executing a cut-off instruction. Ordinary speech without the wake phrase is ignored. Dutch/English code-switching is supported by the selected multilingual provider but **has not been validated on a real microphone corpus in this development environment**. Use the checklist in [testing.md](docs/testing.md) to evaluate your accent and microphone.
+Keep commands under 15 seconds and pause at the end. Missing audio chunks, overly long utterances, and transcripts delayed by more than five seconds cause a visible stop; restart and repeat the full command. Ordinary speech without the wake phrase is ignored. Dutch/English code-switching is supported by the selected multilingual provider but **has not been validated on a real microphone corpus in this development environment**. Use the checklist in [testing.md](docs/testing.md) to evaluate your accent and microphone.
 
 Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** in the menu bar or control window. The button cancels pending decisions and stops listening. Already posted OS input cannot be recalled. Spoken stop has recognition latency; use the button if immediate cancellation matters.
 
-For corrections, say **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
+During a task or within 15 seconds afterward, correct it with **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. After that window, give the full command with **Hey Jev**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
 
 For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command. Typing inserts at the cursor; it does not silently clear existing contents. Newlines, tabs, and control characters are refused; request Enter separately and confirm it. Longer prose generation is not implemented.
 
@@ -88,6 +88,6 @@ open 'dist/Mac Voice Control.app'
 
 Run the packaged app for microphone/TCC testing; running a bare SwiftPM executable is not the end-user launch path. The portable VoiceCore target also builds on Linux with Swift 6.2; native targets and FluidAudio are included only on macOS.
 
-GitHub Actions builds, tests, and packages the same product into a DMG. See [release setup](docs/release.md) for optional Developer ID signing/notarization, [research](docs/research.md) for sources and repository comparisons, [architecture](docs/architecture.md) for the action/observation contract, and [tests](docs/testing.md) for coverage and manual acceptance.
+GitHub Actions builds, tests, and packages the same product into a DMG. See [release setup](docs/release.md) for optional Developer ID signing/notarization, [research](docs/research.md) and the [independent follow-up review](docs/research-follow-up.md) for sources and repository comparisons, [architecture](docs/architecture.md) for the action/observation contract, and [tests](docs/testing.md) for coverage and manual acceptance.
 
 Source is MIT-licensed. Adapted source, FluidAudio, and downloaded model licensing are described in [third-party notices](THIRD_PARTY_NOTICES.md).

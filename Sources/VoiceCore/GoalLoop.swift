@@ -55,20 +55,22 @@ public struct SessionEvent: Sendable {
         guard generation == run else { throw CancellationError() }
         guard clock() < deadline else { throw VoiceError("Time limit reached. Please give a smaller command.") }
     }
-    private func confirm(_ action: Action, observation: Observation, run: UUID, deadline: TimeInterval) async throws -> Bool {
+    private func confirm(_ action: Action, observation: Observation, run: UUID, deadline: TimeInterval) async throws -> TimeInterval? {
         try check(run, deadline: deadline)
         let lifetime = min(confirmationLifetime, deadline-clock())
         guard lifetime.isFinite, lifetime > 0 else { throw VoiceError("Confirmation expired.") }
+        let expiresAt = clock()+lifetime
+        let confirmationID = UUID()
         let result = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(returning:false); return }
                 confirmation = continuation
                 pendingAction = action; pendingObservation = observation
-                pendingConfirmationID = UUID(); confirmationDeadline = clock()+lifetime
+                pendingConfirmationID = confirmationID; confirmationDeadline = expiresAt
                 confirmationTimer = Task { [weak self] in
                     do { try await Task.sleep(nanoseconds: UInt64(lifetime * 1_000_000_000)) }
                     catch { return }
-                    guard let self, self.generation == run else { return }
+                    guard let self, self.generation == run, self.pendingConfirmationID == confirmationID else { return }
                     self.finishConfirmation(false)
                 }
                 onEvent(SessionEvent(.paused,"Confirm: \(action.label). Say ‘confirm’ / ‘bevestig’, or cancel."))
@@ -79,7 +81,7 @@ public struct SessionEvent: Sendable {
                 self.finishConfirmation(false)
             }
         }
-        try check(run, deadline: deadline); return result
+        try check(run, deadline: deadline); return result ? expiresAt : nil
     }
     public func run(goal: String, context: [HistoryEntry] = []) async throws {
         stop(); let run = generation
@@ -123,8 +125,10 @@ public struct SessionEvent: Sendable {
             if attempts.filter({ o.sameScene(as: $0.0) && action.fingerprint == $0.1 }).count >= 1 && action.operation != .wait {
                 throw VoiceError("That action was already attempted on this screen. Please correct the target.")
             }
+            var consentDeadline = deadline
             if action.requiresConfirmation {
-                guard try await confirm(action, observation:o, run: run, deadline: deadline) else { throw VoiceError("Action cancelled or confirmation expired.") }
+                guard let expiry = try await confirm(action, observation:o, run: run, deadline: deadline) else { throw VoiceError("Action cancelled or confirmation expired.") }
+                consentDeadline = expiry
             }
             try check(run, deadline: deadline)
             guard try await desktop.isFresh(o, for: action) else {
@@ -135,11 +139,12 @@ public struct SessionEvent: Sendable {
             try check(run, deadline: deadline)
             onEvent(SessionEvent(.executing,action.label))
             try check(run, deadline: deadline)
+            guard clock() < consentDeadline else { throw VoiceError("Confirmation expired while checking the target. Please repeat the command.") }
             let actionStart = ProcessInfo.processInfo.systemUptime
             try await desktop.execute(action, observed: o); try check(run, deadline: deadline)
             var executed = SessionEvent(.executing,action.label)
             executed.timings["action_ms"] = (ProcessInfo.processInfo.systemUptime-actionStart)*1000
-            if attempts.isEmpty { executed.timings["command_to_first_action_ms"] = (ProcessInfo.processInfo.systemUptime-started)*1000 }
+            if attempts.isEmpty { executed.timings["command_to_first_action_ms"] = (clock()-started)*1000 }
             onEvent(executed)
             attempts.append((o,action.fingerprint)); previous = o; previousAction = action
             try await Task.sleep(nanoseconds: action.operation == .wait ? 750_000_000 : 220_000_000)

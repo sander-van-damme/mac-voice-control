@@ -35,6 +35,8 @@ import VoiceCore
     private var workspaceObserver: NSObjectProtocol?
     private var conversation = ConversationMemory()
     private var pendingConfirmationID: UUID?
+    private var commandReceivedAt: TimeInterval?
+    private var commandSpeechLatency: Double?
     private var epoch = UUID()
     init(speech provider: SpeechProviding? = nil, hasKey: () throws -> Bool = { try KeyStore.read() != nil }) {
         self.speech = provider ?? LocalSpeech()
@@ -55,7 +57,9 @@ import VoiceCore
             self.receive(result.text,ms:result.inferenceMilliseconds)
         }
         speech.onStop = { [weak self] in self?.stop() }
-        speech.onError = { [weak self] text in self?.stop(); self?.phase = .failed; self?.message = text }
+        speech.onError = { [weak self] text in
+            self?.stop(); self?.phase = .failed; self?.message = text; self?.showFeedback()
+        }
         speech.onTranscribing = { [weak self] in
             guard let self, self.listening, self.runTask == nil else { return }; self.phase = .transcribing
         }
@@ -124,7 +128,7 @@ import VoiceCore
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
         speech.stop(); listening = false; pending = nil; pendingImage = nil; pendingMarker = nil
         pendingConfirmationID = nil; conversation.clear()
-        transcript = ""; loop = nil; desktop = nil
+        transcript = ""; loop = nil; desktop = nil; commandReceivedAt = nil
         phase = .stopped; message = "Stopped. No further actions will start."
     }
     func confirm(_ allowed: Bool) {
@@ -142,7 +146,11 @@ import VoiceCore
         NSApp.hide(nil)
         foreground?.activate(options:[])
     }
-    func submitTyped(_ goal: String) { guard listening else { return }; receive("Hey Jev " + goal,ms:0) }
+    func submitTyped(_ goal: String) {
+        guard listening else { return }
+        timings["speech_end_to_transcript_ms"] = nil
+        receive("Hey Jev " + goal,ms:0)
+    }
     private func receive(_ text: String, ms: Double) {
         guard listening else { return }
         timings["transcription_ms"] = ms; transcript = text
@@ -164,6 +172,8 @@ import VoiceCore
     private func begin(_ goal: String, context: [HistoryEntry] = []) {
         loop?.stop(); runTask?.cancel(); clearPending(); epoch = UUID(); let run = epoch
         hideAndRestoreTarget()
+        commandReceivedAt = ProcessInfo.processInfo.systemUptime
+        commandSpeechLatency = timings["speech_end_to_transcript_ms"]
         runTask = Task { [weak self] in
             guard let self, let loop else { return }
             do {
@@ -208,9 +218,14 @@ import VoiceCore
                                   (g.content.y + (point.y-g.desktopCrop.y)/g.desktopCrop.height*g.content.height)/Double(g.pixelHeight))
         } else { pendingImage = nil; pendingMarker = nil }
         timings.merge(event.timings) { _,new in new }; tokens += event.tokens; estimatedCost += event.cost
+        if event.timings["command_to_first_action_ms"] != nil, let commandReceivedAt, let commandSpeechLatency {
+            timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (ProcessInfo.processInfo.systemUptime-commandReceivedAt)*1000
+        }
         if event.phase == .paused { showFeedback() }
     }
-    private func showFeedback() { NSApp.unhide(nil); NSApp.activate(ignoringOtherApps:true) }
+    private func showFeedback() {
+        guard let app = NSApp else { return }; app.unhide(nil); app.activate(ignoringOtherApps:true)
+    }
     private func clearPending() {
         pending = nil; pendingImage = nil; pendingMarker = nil; pendingConfirmationID = nil
     }

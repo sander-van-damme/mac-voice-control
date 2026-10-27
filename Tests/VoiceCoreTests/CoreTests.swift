@@ -184,8 +184,9 @@ final class CoreTests: XCTestCase {
     var apps = [AppCandidate(id:"chrome",name:"Chrome")]
     var state: UInt8 = 0, actions: [Action] = [], changes = true, fresh = true
     var observations = 0
+    var freshHook: (() -> Void)?
     func observe() async throws -> Observation { observations += 1; var o = observation(state:state); o.id = UUID(); return o }
-    func isFresh(_ observation: Observation, for action: Action) async throws -> Bool { fresh }
+    func isFresh(_ observation: Observation, for action: Action) async throws -> Bool { freshHook?(); return fresh }
     func execute(_ action: Action, observed: Observation) async throws { actions.append(action); if changes { state += 30 } }
 }
 @MainActor final class ScriptedDecider: Deciding {

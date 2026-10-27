@@ -47,7 +47,12 @@ final class InputSafetyTests: XCTestCase {
         XCTAssertFalse(SpeechFreshness.accepts(endedAt:10,now:9))
         XCTAssertFalse(SpeechFreshness.accepts(endedAt:.nan,now:15))
     }
-    func testBilingualRecordedRoutingCorpus() throws {
+    func testSensitiveLabelsRequireConsentInBothLanguages() {
+        for label in ["Buy now", "Share", "Allow access", "Versturen", "Delen", "Koop nu", "Toestaan", "Indienen"] {
+            XCTAssertTrue(Action(.click,label:label).requiresConfirmation,label)
+        }
+    }
+    func testBilingualSyntheticRoutingCorpus() throws {
         struct Row: Decodable { let language: String, text: String, kind: String, payload: String? }
         let url = try XCTUnwrap(Bundle.module.url(forResource:"bilingual-routing",withExtension:"json",subdirectory:"Fixtures"))
         let rows = try JSONDecoder().decode([Row].self,from:Data(contentsOf:url))
@@ -122,6 +127,19 @@ final class InputSafetyTests: XCTestCase {
         try await loop.run(goal:"Click the icon")
         XCTAssertEqual(world.actions.count,1)
         XCTAssertNil(loop.pendingConfirmationID)
+    }
+    func testConsentCannotExpireDuringFreshnessCheckThenAct() async throws {
+        let world = World()
+        var now: TimeInterval = 10
+        let loop = GoalLoop(desktop:world,decider:ScriptedDecider(["visualClick"]),clock:{ now })
+        loop.confirmationLifetime = 2
+        loop.onEvent = { event in
+            if event.phase == .paused, let id = loop.pendingConfirmationID { loop.resolveConfirmation(true,id:id) }
+        }
+        world.freshHook = { now = 12 }
+        do { try await loop.run(goal:"Click icon"); XCTFail("Expected expiry") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("Confirmation expired")) }
+        XCTAssertTrue(world.actions.isEmpty)
     }
     func testTaskCancellationResumesPendingConfirmation() async throws {
         let world = World()

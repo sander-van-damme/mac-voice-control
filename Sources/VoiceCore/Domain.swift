@@ -139,7 +139,8 @@ public struct Action: Equatable, Sendable {
     public var fingerprint: String { "\(operation.rawValue)|\(target ?? "")|\(text ?? "")|\(shortcut?.rawValue ?? "")|\(scroll)|\(point?.x ?? 0),\(point?.y ?? 0)" }
     public var requiresConfirmation: Bool {
         sensitive || operation == .visualClick || shortcut == .enter || shortcut == .closeTab ||
-        ["send","delete","remove","share","pay","purchase","submit","publish","verzend","verstuur","verwijder","deel","betalen","kopen","publiceer"].contains { label.lowercased().contains($0) }
+        ["send","delete","remove","share","pay","purchase","buy","checkout","submit","publish","upload","grant","allow","invite",
+         "verzend","verstuur","versturen","verwijder","deel","delen","betaal","betalen","kopen","koop","publiceer","toestaan","uitnodig","indienen"].contains { label.lowercased().contains($0) }
     }
 }
 

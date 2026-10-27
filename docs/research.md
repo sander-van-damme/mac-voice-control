@@ -1,5 +1,7 @@
 # Research and implementation decision record
 
+A fresh independent source/API review and the rationale for extending PR #1 are recorded in [research-follow-up.md](research-follow-up.md).
+
 Research date: 26 October 2026. This document was written before application implementation. Source review is evidence about design, not a claim that we reproduced upstream benchmarks. The development host is Linux; desktop behavior, ASR accuracy, and live Jev decisions require separate validation.
 
 ## Recommendation

@@ -16,6 +16,8 @@ GUI Start/Stop → cancellation generation → observe → Jev → validate → 
 
 Each observation has a UUID, monotonic acquisition time, app/PID, window frame, display-global point crop, image geometry, JPEG, a compact visual signature, focused field identity, and bounded AX controls. AX metadata is explicitly named `supplementary_accessibility`; absence never proves an object is absent. Secure fields are removed before serialization and their pixel regions redacted. Screenshot consent explains that other sensitive material can still appear visually.
 
+The request retains the observation UUID, and action decoding refuses another observation even if it reuses the same AX IDs. Visual clicks additionally compare a 64 × 64 color-pixel patch around the proposed point in the old and fresh JPEG; a global thumbnail alone can hide a changed small icon. This reduces one specific stale-target risk, without proving that the model selected the correct control.
+
 Each Jev decision receives the original goal, optional correction, up to six action/outcome records, current screenshot, and dynamic candidates. Operations and targets are separate Choice questions so 60 controls do not multiply into hundreds of fully described actions. Text choices come only from the user's verbatim transcript, quoted spans, and deterministic URL/search normalization. No model invents arbitrary text or executable commands. A separate Noul judges completion, another checks presence of the visual target, and another assesses sensitivity. Box locates the conditional next visual target independently; its answer is used only for a visual-click operation.
 
 Initial gates: selected probability ≥0.75 and confidence ≥0.65; completion ≥0.95 with operation `done`; visual presence ≥0.95 and Box confidence ≥0.85. These are conservative policy defaults, not calibrated accuracy claims. Validate probability domains, sums, offered IDs, chosen argmax, image limits, finite positive geometry, and pinned model identity. Reject incompatible/missing outputs rather than guessing.
@@ -32,6 +34,8 @@ Stop synchronously invalidates the generation and cancels the task before return
 
 Potentially sensitive operations pause for explicit confirmation tied to action, observation, generation, and a short expiry. New commands, Stop, target changes, and timeout invalidate it. Return/submission, unknown visual clicks, and actions labelled send/delete/share/pay require confirmation even if Jev says safe. Model sensitivity can add confirmation, never remove deterministic requirements. No automatic retry after a confirmed action. User can say “confirm / bevestig” or “cancel / annuleer”.
 
+Confirmations carry an opaque UUID and monotonic deadline. Approval callbacks must present that UUID, and authority is checked when approving and immediately before input, including after fresh capture. A cleanup timer cannot extend the deadline. Cancelling a task resumes pending confirmation rather than leaving a suspended continuation. Whole-goal deadlines are also checked after suspension and before action execution.
+
 API key lives in Keychain. Audio remains local. Screenshots and AX metadata go to TypeSafe only after GUI consent. No content/screenshot persistence by default; diagnostics store stage timings, token counts, and estimated cost in memory. Dependency logs must be disabled for speech content. Secure AX regions are masked before compression; unavailable security metadata fails closed for typing. Redaction cannot guarantee removal of arbitrary secrets displayed in ordinary text or images.
 
 ## Speech and usability
@@ -39,6 +43,8 @@ API key lives in Keychain. Audio remains local. Screenshots and AX metadata go t
 Apple Silicon and macOS 14.2+. SwiftUI window and menu bar share one session model. First-run setup covers key, privacy consent, permissions, and a cancellable/retryable GUI model download with progress. FluidAudio is pinned, Ultra is selected explicitly, and assets are cached outside the bundle. No runtime terminal requirement.
 
 Commands require a leading “Hey Jev” (including the observed “Hey Jeff” recognition variant). Dutch and English stop/cancel and confirmation phrases work without wake phrase when relevant. Ordinary speech is discarded. Explicit “dictate / dicteer” mode treats following text only as insertion; words such as “delete” inside dictation are never executed. In-flight command handling is single-session: corrections replace the goal; unrelated new commands cancel the previous goal before beginning.
+
+Wake-free corrections apply only during a task or within 15 seconds of its last completion/failure. Stop and dictation clear correction authority. The original goal and latest correction are bounded separately; repeated corrections do not recursively grow old prompts. Audio chunks have sequence numbers; a gap stops recognition rather than allowing an incomplete utterance to execute. Speech older than five seconds at ASR entry or completion is rejected. The five-second cutoff is a conservative policy, not a measured performance claim. Microphone conversion/length errors produce visible recovery guidance.
 
 ## Explicit limits
 
