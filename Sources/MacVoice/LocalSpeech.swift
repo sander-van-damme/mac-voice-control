@@ -35,6 +35,7 @@ import VoiceCore
     }
     func prepare(progress: @escaping @Sendable (Double,String) -> Void) async throws {
         guard !ready else { return }
+        DebugLog.shared.event("speech.preparing",["model":"parakeet-ultra"])
         let models = try await AsrModels.downloadAndLoad(version:.ultra,progressHandler: { update in
             let message: String
             switch update.phase {
@@ -42,17 +43,20 @@ import VoiceCore
             case let .downloading(completedFiles,totalFiles): message = "Downloading speech model: \(completedFiles) / \(totalFiles) files"
             case let .compiling(modelName): message = "Preparing \(modelName)…"
             }
+            DebugLog.shared.event("speech.model_progress",["fraction":String(update.fractionCompleted),"message":message])
             progress(update.fractionCompleted,message)
         })
         try Task.checkCancellation()
         try await manager.loadModels(models)
         try Task.checkCancellation(); ready = true
+        DebugLog.shared.event("speech.ready",["model":"parakeet-ultra"])
     }
     func start() throws {
         stop()
         guard ready else { throw VoiceError("Download the local speech model in Setup first.") }
         guard AVCaptureDevice.authorizationStatus(for:.audio) == .authorized else { throw VoiceError("Allow Microphone access in Setup.") }
         let run = generation
+        DebugLog.shared.event("speech.started",["run_id":run.uuidString])
         let stream = AsyncStream<AudioChunk>(bufferingPolicy:.bufferingNewest(64)) { continuation = $0 }
         let utterances = AsyncStream<Utterance>.makeStream(bufferingPolicy:.bufferingNewest(1))
         let audioContinuation = continuation!
@@ -84,6 +88,7 @@ import VoiceCore
             for await chunk in stream {
                 if Task.isCancelled { break }
                 guard continuity.accept(sequence:chunk.sequence) else {
+                    DebugLog.shared.event("speech.discontinuity",["sequence":String(chunk.sequence)])
                     await fail("Microphone audio was interrupted. Start again and repeat the full command."); return
                 }
                 do {
@@ -104,11 +109,16 @@ import VoiceCore
                 guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:MonotonicTime.now) else {
                     onError("Speech was delayed. Start again and repeat your command."); return
                 }
+                let utteranceID = UUID().uuidString
+                DebugAudio.record(utterance.samples,utteranceID:utteranceID)
+                DebugLog.shared.event("speech.transcribing",["utterance_id":utteranceID,"run_id":run.uuidString,
+                    "ended_at":String(utterance.endedAt),"sample_count":String(utterance.samples.count)])
                 onTranscribing()
                 let start = MonotonicTime.now
                 do {
                     var decoder = try TdtDecoderState()
                     let result = try await manager.transcribe(utterance.samples,decoderState:&decoder)
+                    DebugLog.shared.value("speech.result",result,fields:["utterance_id":utteranceID,"run_id":run.uuidString])
                     guard !Task.isCancelled, generation == run else { return }
                     let ms = (MonotonicTime.now-start)*1000
                     guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:MonotonicTime.now) else {
@@ -119,12 +129,14 @@ import VoiceCore
                         endToTranscriptMilliseconds:(MonotonicTime.now-utterance.endedAt)*1000))
                 } catch {
                     guard !Task.isCancelled, generation == run else { return }
+                    DebugLog.shared.event("speech.error",["utterance_id":utteranceID,"error":error.localizedDescription])
                     onError("Local transcription failed. Stop and start listening to try again.")
                 }
             }
         }
     }
     func stop() {
+        DebugLog.shared.event("speech.stopped",["run_id":generation.uuidString])
         generation = UUID()
         monitorFeed.set(nil); monitor?.cancel(); monitor = nil; monitorRequest = nil
         monitorRenewal?.cancel(); monitorRenewal = nil
@@ -146,7 +158,10 @@ import VoiceCore
         request.contextualStrings = ["stop","cancel"]
         let run = generation
         monitorRequest = request; monitorFeed.set(request)
-        monitor = recognizer.recognitionTask(with:request) { [weak self] result,_ in
+        monitor = recognizer.recognitionTask(with:request) { [weak self] result,error in
+            if let result { DebugLog.shared.event("speech.stop_monitor",["text":result.bestTranscription.formattedString,
+                "is_final":String(result.isFinal),"run_id":run.uuidString]) }
+            if let error { DebugLog.shared.event("speech.stop_monitor_error",["error":error.localizedDescription]) }
             guard let result, InputRouter.isStop(result.bestTranscription.formattedString) else { return }
             Task { @MainActor in
                 guard let self, self.generation == run else { return }

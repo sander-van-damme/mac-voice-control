@@ -220,6 +220,10 @@ public final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Send
         self.session = session ?? URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
     }
     public func decide(_ request: JevRequest) async throws -> JevResponse {
+        let requestID = UUID().uuidString
+        let fields = ["request_id":requestID,"observation_id":request.observationID.uuidString,"model":JevRequest.model]
+        DebugLog.shared.record("typesafe.request",data:request.body,fields:fields)
+        defer { DebugLog.shared.event("typesafe.finished",fields) }
         var req = URLRequest(url: URL(string: "https://api.typesafe.ai/v1/systemone")!)
         req.httpMethod = "POST"; req.httpBody = request.body
         req.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
@@ -227,7 +231,11 @@ public final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Send
         req.setValue("true", forHTTPHeaderField: "TypeSafe-Danger-Zone-Images")
         for attempt in 0..<3 {
             try Task.checkCancellation()
-            let (data,response) = try await session.data(for: req)
+            DebugLog.shared.event("typesafe.attempt",fields.merging(["attempt":String(attempt)]) { _,v in v })
+            let data: Data, response: URLResponse
+            do { (data,response) = try await session.data(for:req) }
+            catch { DebugLog.shared.event("typesafe.transport_error",fields.merging(["error":error.localizedDescription]) { _,v in v }); throw error }
+            DebugLog.shared.record("typesafe.response",data:data,ext:"json",fields:fields.merging(["attempt":String(attempt),"status":String((response as? HTTPURLResponse)?.statusCode ?? 0)]) { _,v in v })
             try Task.checkCancellation()
             guard let http = response as? HTTPURLResponse else { throw VoiceError("TypeSafe returned no HTTP response.") }
             if http.statusCode == 200 { return try JevResponse.decode(data) }

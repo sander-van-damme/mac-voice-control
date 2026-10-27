@@ -4,7 +4,8 @@ import PackageDescription
 var dependencies: [Package.Dependency] = []
 var products: [Product] = [.library(name: "VoiceCore", targets: ["VoiceCore"])]
 var targets: [Target] = [
-    .target(name: "VoiceCore"),
+    .systemLibrary(name: "CZlib", pkgConfig: "zlib"),
+    .target(name: "VoiceCore", dependencies: ["CZlib"]),
     .testTarget(name: "VoiceCoreTests", dependencies: ["VoiceCore"], resources: [.copy("Fixtures")])
 ]
 #if os(macOS)

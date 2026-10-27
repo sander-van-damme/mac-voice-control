@@ -61,12 +61,16 @@ Sensitive actions pause and show the proposed action. Say **confirm / bevestig**
 ## Privacy and limitations
 
 - Voice audio is processed locally. Transcripts, screenshots, and bounded AX context go to TypeSafe during ordinary decisions. Optional language assistance sends commands and recent action outcomes to OpenAI; screenshots and AX controls require its separate screen-context setting. Explicit dictation inserts locally.
-- Screenshots and private document content are not saved to persistent logs. Keychain stores the API key; preferences store consent. Local model files are cached by FluidAudio. Diagnostics show only timings, token usage, and estimated direct API cost; transcript feedback stays in memory.
+- Debug logging is off by default. When enabled in Setup, compressed voice snippets, transcripts, screenshots, full model requests/responses, and action records are saved locally. **These ZIPs contain private content.** Nothing uploads automatically. Keychain stores credentials; authentication headers and sign-in responses are excluded from debug logs. See [debug logging](docs/debug-logging.md) for storage, upload, and retention details.
 - Known secure AX fields are masked, secure focus blocks control, unknown text focus blocks typing, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
 - The app controls the foreground window on the display with the largest overlap. A window spanning displays is cropped to one display; offscreen controls require scrolling or moving the window. Moving/resizing/switching windows during a decision causes re-observation or a safe stop.
 - Chrome's AX tree is incomplete on some sites, dense tab strips, canvas apps, rich editors, and loading pages. Vision remains first-class. Google Docs, Gmail, Miro, and actual Chrome end-to-end flows still need manual validation.
 - Automatic OCR, target zoom refinement, background-window control, Intel support, global voice shortcuts, Touch Bar controls, and wake-free listening are later milestones. No shell or arbitrary code execution is exposed to either model.
 - Confidence gates and safety classification reduce risk but do not establish correctness. This is supervised experimental software.
+
+## Debug logs
+
+Enable **Setup → Enable debug logging**, reproduce the issue, then choose **Open debug log folder**. Upload the relevant ZIP parts for analysis. This seals the current part; logging continues in a new ZIP. Turn logging off when finished. Archives are at most 25 MB each, with a 1 GB total cache that removes the oldest parts automatically.
 
 ## Troubleshooting
 

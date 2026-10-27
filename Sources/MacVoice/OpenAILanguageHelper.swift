@@ -6,6 +6,13 @@ struct OpenAILanguageHelper: LanguageHelping {
     let model: String
     func assist(_ request: LanguageRequest) async throws -> LanguageReply {
         let body = try OpenAIProtocol.body(for:request,model:model)
+        let fields = ["request_id":request.id.uuidString,"observation_id":request.observation.id.uuidString,"model":model]
+        DebugLog.shared.record("chatgpt.request",data:body,fields:fields)
+        var rawStream = Data()
+        defer {
+            DebugLog.shared.record("chatgpt.response_stream",data:rawStream,ext:"txt",fields:fields)
+            DebugLog.shared.event("chatgpt.finished",fields)
+        }
         let token = try await auth.token(); try Task.checkCancellation()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 45
@@ -18,12 +25,21 @@ struct OpenAILanguageHelper: LanguageHelping {
             http.setValue("application/json",forHTTPHeaderField:"Content-Type")
             http.setValue("text/event-stream",forHTTPHeaderField:"Accept")
             let (bytes,response) = try await session.bytes(for:http)
+            DebugLog.shared.event("chatgpt.http",fields.merging(["status":String((response as? HTTPURLResponse)?.statusCode ?? 0)]) { _,v in v })
             guard let response = response as? HTTPURLResponse, response.statusCode == 200,
                   response.value(forHTTPHeaderField:"Content-Type")?.contains("text/event-stream") == true else {
+                // Preserve error bodies too, bounded by the same stream budget.
+                if DebugLog.shared.isEnabled {
+                    for try await byte in bytes {
+                        if rawStream.count >= 1_000_000 { break }
+                        rawStream.append(byte)
+                    }
+                }
                 throw VoiceError("ChatGPT request failed. Check sign-in, model access, and plan usage in Setup.")
             }
             var stream = OpenAIEventStream(), count = 0
             for try await line in bytes.lines {
+                if DebugLog.shared.isEnabled { rawStream.append(contentsOf:(line+"\n").utf8) }
                 try Task.checkCancellation(); count += line.utf8.count
                 guard count <= 1_000_000 else { throw VoiceError("Language response exceeded its limit.") }
                 try stream.append(line:line)
