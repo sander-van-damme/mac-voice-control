@@ -66,6 +66,11 @@ import VoiceCore
         }
         let fresh = try await ScreenCapture.capture(window:o.window,redactions:ax.secureRegions)
         try Task.checkCancellation()
+        guard fresh.geometry == o.geometry else { return false }
+        if action.operation == .visualClick {
+            guard let point = action.point,
+                  try ScreenCapture.targetUnchanged(previous:o.jpeg,current:fresh.jpeg,geometry:o.geometry,point:point) else { return false }
+        }
         let now = Observation(pid:o.pid,app:o.app,window:o.window,controls:[],geometry:fresh.geometry,jpeg:fresh.jpeg,signature:fresh.signature)
         return basicGuard(o,ax:ax) && o.sameScene(as:now)
     }

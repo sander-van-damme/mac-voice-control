@@ -23,6 +23,9 @@ public struct SessionEvent: Sendable {
     private var generation = UUID()
     private var confirmation: CheckedContinuation<Bool,Never>?
     private var confirmationTimer: Task<Void,Never>?
+    private var confirmationDeadline: TimeInterval?
+    private let clock: () -> TimeInterval
+    public private(set) var pendingConfirmationID: UUID?
     public private(set) var pendingAction: Action?
     public private(set) var pendingObservation: Observation?
     public private(set) var history: [HistoryEntry] = []
@@ -30,45 +33,67 @@ public struct SessionEvent: Sendable {
     public var maxSteps = 20
     public var timeBudget: Double = 90
     public var confirmationLifetime: Double = 25
-    public init(desktop: DesktopControlling, decider: Deciding) { self.desktop = desktop; self.decider = decider }
+    public init(desktop: DesktopControlling, decider: Deciding,
+                clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.desktop = desktop; self.decider = decider; self.clock = clock
+    }
     public func stop() {
-        generation = UUID(); resolveConfirmation(false)
+        generation = UUID(); finishConfirmation(false)
     }
-    public func resolveConfirmation(_ allowed: Bool) {
+    public func resolveConfirmation(_ allowed: Bool, id: UUID) {
+        guard pendingConfirmationID == id else { return }
+        // A timer can be delayed by suspension or IPC. It never extends consent.
+        finishConfirmation(allowed && clock() < (confirmationDeadline ?? -.infinity))
+    }
+    private func finishConfirmation(_ allowed: Bool) {
         confirmationTimer?.cancel(); confirmationTimer = nil
-        let c = confirmation; confirmation = nil; pendingAction = nil; pendingObservation = nil; c?.resume(returning: allowed)
+        let c = confirmation; confirmation = nil; pendingAction = nil; pendingObservation = nil
+        pendingConfirmationID = nil; confirmationDeadline = nil; c?.resume(returning: allowed)
     }
-    private func check(_ run: UUID) throws {
+    private func check(_ run: UUID, deadline: TimeInterval) throws {
         try Task.checkCancellation()
         guard generation == run else { throw CancellationError() }
+        guard clock() < deadline else { throw VoiceError("Time limit reached. Please give a smaller command.") }
     }
-    private func confirm(_ action: Action, observation: Observation, run: UUID) async throws -> Bool {
-        try check(run)
-        pendingAction = action
-        pendingObservation = observation
-        let result = await withCheckedContinuation { continuation in
-            confirmation = continuation
-            confirmationTimer = Task { [weak self] in
-                guard let self else { return }
-                do { try await Task.sleep(nanoseconds: UInt64(confirmationLifetime * 1_000_000_000)) }
-                catch { return }
-                resolveConfirmation(false)
+    private func confirm(_ action: Action, observation: Observation, run: UUID, deadline: TimeInterval) async throws -> Bool {
+        try check(run, deadline: deadline)
+        let lifetime = min(confirmationLifetime, deadline-clock())
+        guard lifetime.isFinite, lifetime > 0 else { throw VoiceError("Confirmation expired.") }
+        let result = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else { continuation.resume(returning:false); return }
+                confirmation = continuation
+                pendingAction = action; pendingObservation = observation
+                pendingConfirmationID = UUID(); confirmationDeadline = clock()+lifetime
+                confirmationTimer = Task { [weak self] in
+                    do { try await Task.sleep(nanoseconds: UInt64(lifetime * 1_000_000_000)) }
+                    catch { return }
+                    guard let self, self.generation == run else { return }
+                    self.finishConfirmation(false)
+                }
+                onEvent(SessionEvent(.paused,"Confirm: \(action.label). Say ‘confirm’ / ‘bevestig’, or cancel."))
             }
-            onEvent(SessionEvent(.paused,"Confirm: \(action.label). Say ‘confirm’ / ‘bevestig’, or cancel."))
+        } onCancel: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.generation == run else { return }
+                self.finishConfirmation(false)
+            }
         }
-        try check(run); return result
+        try check(run, deadline: deadline); return result
     }
     public func run(goal: String, context: [HistoryEntry] = []) async throws {
         stop(); let run = generation
         history = Array(context.suffix(3))
-        let started = ProcessInfo.processInfo.systemUptime
+        guard timeBudget.isFinite, timeBudget > 0, timeBudget <= 3600, maxSteps > 0,
+              confirmationLifetime.isFinite, (0...300).contains(confirmationLifetime) else { throw VoiceError("Invalid execution limits.") }
+        let started = clock(), deadline = started+timeBudget
         var previous: Observation?, previousAction: Action?, noChanges = 0, waits = 0, stale = 0
         var attempts: [(Observation,String)] = []
         for _ in 0..<maxSteps {
-            try check(run)
-            guard ProcessInfo.processInfo.systemUptime-started < timeBudget else { throw VoiceError("Time limit reached. Please give a smaller command.") }
+            try check(run, deadline: deadline)
             onEvent(SessionEvent(.observing,"Looking at the current window…"))
-            let o = try await desktop.observe(); try check(run)
+            try check(run, deadline: deadline)
+            let o = try await desktop.observe(); try check(run, deadline: deadline)
             if let previous, let action = previousAction {
                 let changed = !o.sameScene(as: previous)
                 if action.operation != .wait { noChanges = changed ? 0 : noChanges + 1 }
@@ -78,8 +103,9 @@ public struct SessionEvent: Sendable {
             guard noChanges < 3 else { throw VoiceError("The screen is not changing. I stopped to avoid repeating actions.") }
             let request = try JevRequest(goal: goal, observation: o, apps: desktop.apps, history: history)
             onEvent(SessionEvent(.deciding,"Choosing the next action…"))
+            try check(run, deadline: deadline)
             let t = ProcessInfo.processInfo.systemUptime
-            let response = try await decider.decide(request); try check(run)
+            let response = try await decider.decide(request); try check(run, deadline: deadline)
             let action = try request.action(from: response, observation: o)
             var event = SessionEvent(.deciding,action.label)
             event.timings = o.timings; event.timings["jev_ms"] = (ProcessInfo.processInfo.systemUptime-t)*1000
@@ -87,7 +113,7 @@ public struct SessionEvent: Sendable {
             onEvent(event)
             if action.operation == .done {
                 guard try await desktop.isFresh(o,for:action) else { continue }
-                try check(run); onEvent(SessionEvent(.completed,"The goal appears complete.")); return
+                try check(run, deadline: deadline); onEvent(SessionEvent(.completed,"The goal appears complete.")); return
             }
             if action.operation == .clarify { throw VoiceError("Please clarify the target or give a smaller command. No action was taken.") }
             if action.operation == .wait {
@@ -98,18 +124,19 @@ public struct SessionEvent: Sendable {
                 throw VoiceError("That action was already attempted on this screen. Please correct the target.")
             }
             if action.requiresConfirmation {
-                guard try await confirm(action, observation:o, run: run) else { throw VoiceError("Action cancelled or confirmation expired.") }
+                guard try await confirm(action, observation:o, run: run, deadline: deadline) else { throw VoiceError("Action cancelled or confirmation expired.") }
             }
-            try check(run)
+            try check(run, deadline: deadline)
             guard try await desktop.isFresh(o, for: action) else {
                 stale += 1; previous = nil; previousAction = nil
                 guard stale < 3 else { throw VoiceError("The window keeps changing. I stopped before acting on an outdated target.") }
                 continue
             }
-            try check(run)
+            try check(run, deadline: deadline)
             onEvent(SessionEvent(.executing,action.label))
+            try check(run, deadline: deadline)
             let actionStart = ProcessInfo.processInfo.systemUptime
-            try await desktop.execute(action, observed: o); try check(run)
+            try await desktop.execute(action, observed: o); try check(run, deadline: deadline)
             var executed = SessionEvent(.executing,action.label)
             executed.timings["action_ms"] = (ProcessInfo.processInfo.systemUptime-actionStart)*1000
             if attempts.isEmpty { executed.timings["command_to_first_action_ms"] = (ProcessInfo.processInfo.systemUptime-started)*1000 }

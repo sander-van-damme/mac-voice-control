@@ -5,8 +5,11 @@ func observation(state: UInt8 = 0, secure: Bool = false) -> Observation {
     let frame = Rect(-1920,100,1200,800)
     let controls = [Control(id:"e0",role:"AXButton",label:"Next",frame:Rect(-1800,200,80,40),canPress:true),
                     Control(id:"e1",role:"AXTextField",label:"Search",frame:Rect(-1750,300,400,40),canFocus:true)]
-    return Observation(pid:123,app:"Chrome",window:frame,controls:controls,focusedID:"e1",secureFocus:secure,
+    var result = Observation(pid:123,app:"Chrome",window:frame,controls:controls,focusedID:"e1",secureFocus:secure,
         geometry:try! .fitted(crop:frame),jpeg:Data([0xFF,0xD8,0xFF]),signature:[UInt8](repeating:state,count:100))
+    // All helper calls represent the same recorded observation. World captures below use fresh IDs.
+    result.id = UUID(uuidString:"B8CF81F7-75F1-473D-B1D3-FF4FCBFDC057")!
+    return result
 }
 func request(goal: String = "click Next") throws -> JevRequest {
     try JevRequest(goal:goal,observation:observation(),apps:[AppCandidate(id:"chrome",name:"Chrome")],history:[])
@@ -127,7 +130,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(InputRouter.route("Hey Jev, open een new tab",final:true),.command("open een new tab"))
     }
     func testCorrectionsAndConfirmationRouting() {
-        XCTAssertEqual(InputRouter.route("Nee, de andere",final:true),.correction("Nee, de andere"))
+        XCTAssertEqual(InputRouter.route("Nee, de andere",final:true,correctionAllowed:true),.correction("Nee, de andere"))
         XCTAssertEqual(InputRouter.route("bevestig",final:true,confirmationPending:true),.confirm)
         XCTAssertEqual(InputRouter.route("bevestig",final:true,confirmationPending:false),.ignore)
         XCTAssertEqual(InputRouter.route("nee",final:true,confirmationPending:true),.cancel)
@@ -150,9 +153,9 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(try q.action(from:response(q,operation:"done",complete:0.99),observation:observation()).operation,.done)
     }
     func testTypingFocusesTargetBeforeInserting() throws {
-        let q = try request(goal:"type hello")
         let wrongFocus = Observation(pid:123,app:"Chrome",window:observation().window,controls:observation().controls,focusedID:nil,
             geometry:observation().geometry,jpeg:Data([1]),signature:[0])
+        let q = try JevRequest(goal:"type hello",observation:wrongFocus,apps:[],history:[])
         XCTAssertEqual(try q.action(from:response(q,operation:"typeText",selected:["text":"t0"]),observation:wrongFocus).operation,.focus)
     }
     func testUtteranceSilenceAndMaximumDuration() {
@@ -181,7 +184,7 @@ final class CoreTests: XCTestCase {
     var apps = [AppCandidate(id:"chrome",name:"Chrome")]
     var state: UInt8 = 0, actions: [Action] = [], changes = true, fresh = true
     var observations = 0
-    func observe() async throws -> Observation { observations += 1; return observation(state:state) }
+    func observe() async throws -> Observation { observations += 1; var o = observation(state:state); o.id = UUID(); return o }
     func isFresh(_ observation: Observation, for action: Action) async throws -> Bool { fresh }
     func execute(_ action: Action, observed: Observation) async throws { actions.append(action); if changes { state += 30 } }
 }
@@ -246,7 +249,7 @@ final class CoreTests: XCTestCase {
     func testConfirmationDoesNotSurviveChangedScreen() async throws {
         let world = World(); world.fresh = false
         let loop = GoalLoop(desktop:world,decider:ScriptedDecider(["visualClick"]))
-        loop.onEvent = { if $0.phase == .paused { loop.resolveConfirmation(true) } }
+        loop.onEvent = { if $0.phase == .paused, let id = loop.pendingConfirmationID { loop.resolveConfirmation(true,id:id) } }
         do { try await loop.run(goal:"Click icon"); XCTFail("Expected stale rejection") } catch { }
         XCTAssertTrue(world.actions.isEmpty)
     }

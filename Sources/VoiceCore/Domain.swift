@@ -62,6 +62,11 @@ public struct ImageGeometry: Codable, Equatable, Sendable {
         return Point(desktopCrop.x + (px-content.x)/content.width * desktopCrop.width,
                      desktopCrop.y + (py-content.y)/content.height * desktopCrop.height)
     }
+    public func imagePoint(for point: Point) throws -> Point {
+        guard content.valid, desktopCrop.contains(point) else { throw VoiceError("The target is outside the captured screen.") }
+        return Point(content.x+(point.x-desktopCrop.x)/desktopCrop.width*content.width,
+                     content.y+(point.y-desktopCrop.y)/desktopCrop.height*content.height)
+    }
 }
 
 public struct Control: Codable, Equatable, Sendable {

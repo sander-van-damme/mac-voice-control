@@ -54,13 +54,16 @@ public struct JevRequest: Sendable {
     public let body: Data
     public let candidates: Candidates
     public let choices: [String: Set<String>]
+    public let observationID: UUID
     private let explicitlyNamedApp: AppCandidate?
     public init(goal: String, observation o: Observation, apps: [AppCandidate], history: [HistoryEntry]) throws {
+        observationID = o.id
         guard (280...1568).contains(o.geometry.pixelWidth), (280...1568).contains(o.geometry.pixelHeight),
               !o.jpeg.isEmpty, o.jpeg.count < 4_000_000 else { throw VoiceError("The screenshot exceeds the supported image limits.") }
         candidates = Candidates(goal: goal, observation: o, apps: apps)
         let c = candidates
-        let relevantGoal = goal.components(separatedBy:"User correction (takes priority):").last ?? goal
+        let relevantGoal = goal.hasPrefix("User correction (takes priority):")
+            ? String(goal.split(separator:"\n").first ?? "") : goal
         let named = c.apps.filter { $0.mentioned(in:relevantGoal) }
         explicitlyNamedApp = named.count == 1 ? named.first : nil
         var options: [String: [String: String]] = [:]
@@ -109,7 +112,7 @@ public struct JevRequest: Sendable {
         let encoder = JSONEncoder()
         let controlsJSON = try JSONSerialization.jsonObject(with: encoder.encode(c.controls))
         let historyJSON = try JSONSerialization.jsonObject(with: encoder.encode(Array(history.suffix(6))))
-        let state: [String: Any] = ["goal":String(goal.prefix(1400)), "screenshot":ref,
+        let state: [String: Any] = ["goal":String(goal.prefix(2200)), "screenshot":ref,
             "application":o.app, "observation_id":o.id.uuidString, "focused_control":o.focusedID ?? "none",
             "supplementary_accessibility":controlsJSON, "accessibility_incomplete":o.accessibilityIncomplete,
             "accessibility_note":"Absence from this bounded tree does not mean absence from the screenshot. Field values are omitted for privacy.",
@@ -120,6 +123,7 @@ public struct JevRequest: Sendable {
     }
 
     public func action(from response: JevResponse, observation o: Observation) throws -> Action {
+        guard o.id == observationID else { throw VoiceError("The decision belongs to an older observation. Observe again before acting.") }
         guard response.model == Self.model else { throw VoiceError("Incompatible Jev model.") }
         guard try response.probability("is_command") >= 0.9 else { throw VoiceError("No clear computer command was recognized.") }
         let op = try response.choice("operation", offered: choices["operation"]!)

@@ -34,7 +34,8 @@ public enum InputRouter {
     public static func isStop(_ text: String) -> Bool {
         ["stop","stop now","stop nu","cancel","cancel that","annuleer","annuleren","stop jev"].contains(normalized(text))
     }
-    public static func route(_ text: String, final: Bool, confirmationPending: Bool = false) -> RoutedInput {
+    public static func route(_ text: String, final: Bool, confirmationPending: Bool = false,
+                             correctionAllowed: Bool = false) -> RoutedInput {
         // Partials can only remove authority, never authorize an action.
         if isStop(text) { return .stop }
         guard final else { return .ignore }
@@ -44,7 +45,8 @@ public enum InputRouter {
             if ["confirm","yes confirm","bevestig","ja bevestig"].contains(lower) { return .confirm }
             if ["no","nee","cancel","annuleer"].contains(lower) { return .cancel }
         }
-        if lower.hasPrefix("nee,") || lower.hasPrefix("nee ") || lower.hasPrefix("actually ") || lower.hasPrefix("no, ") {
+        if (correctionAllowed || WakePhrase.command(in:text) != nil) &&
+            (lower.hasPrefix("nee,") || lower.hasPrefix("nee ") || lower.hasPrefix("actually ") || lower.hasPrefix("actually,") || lower.hasPrefix("no, ")) {
             return .correction(String(raw.prefix(1000)))
         }
         guard WakePhrase.command(in: text) != nil, !lower.isEmpty else { return .ignore }
@@ -119,6 +121,8 @@ public struct UtteranceSegmenter: Sendable {
     private var silent = 0, voiced = 0
     private var discardingLongUtterance = false
     public var threshold: Float = 0.012
+    public private(set) var discardedUtterances = 0
+    public private(set) var completedTrailingSilence: TimeInterval = 0
     public init() {}
     public mutating func append(_ chunk: [Float]) -> [Float]? {
         guard !chunk.isEmpty else { return nil }
@@ -137,10 +141,12 @@ public struct UtteranceSegmenter: Sendable {
             // A length cap is not proof the speaker finished. Discard until silence,
             // instead of executing a truncated instruction as a final transcript.
             samples.removeAll(keepingCapacity:true); voiced = 0; silent = 0
+            discardedUtterances += 1
             discardingLongUtterance = true
             return nil
         }
         if !samples.isEmpty && silent >= 12_800 {
+            completedTrailingSilence = Double(silent)/16000
             let result = voiced >= 1600 ? samples : nil
             samples.removeAll(keepingCapacity: true); silent = 0; voiced = 0
             return result

@@ -5,7 +5,7 @@ import VoiceCore
 
 @MainActor protocol SpeechProviding: AnyObject {
     var ready: Bool { get }
-    var onTranscript: (String,Double) -> Void { get set }
+    var onTranscript: (SpeechTranscript) -> Void { get set }
     var onStop: () -> Void { get set }
     var onError: (String) -> Void { get set }
     var onTranscribing: () -> Void { get set }
@@ -25,7 +25,7 @@ import VoiceCore
     private var monitorRenewal: Task<Void,Never>?
     private let monitorFeed = RecognitionFeed()
     private(set) var ready = false
-    var onTranscript: (String,Double) -> Void = { _,_ in }
+    var onTranscript: (SpeechTranscript) -> Void = { _ in }
     var onStop: () -> Void = {}
     var onError: (String) -> Void = { _ in }
     var onTranscribing: () -> Void = {}
@@ -54,48 +54,69 @@ import VoiceCore
         guard AVCaptureDevice.authorizationStatus(for:.audio) == .authorized else { throw VoiceError("Allow Microphone access in Setup.") }
         let run = generation
         let stream = AsyncStream<AudioChunk>(bufferingPolicy:.bufferingNewest(64)) { continuation = $0 }
-        let utterances = AsyncStream<[Float]>.makeStream(bufferingPolicy:.bufferingNewest(1))
+        let utterances = AsyncStream<Utterance>.makeStream(bufferingPolicy:.bufferingNewest(1))
         let audioContinuation = continuation!
         let input = engine.inputNode, format = input.outputFormat(forBus:0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw VoiceError("No microphone is available.") }
         startStopMonitor()
         let feed = monitorFeed
+        let sequence = AudioSequence()
         input.installTap(onBus:0,bufferSize:1024,format:format) { buffer,_ in
             feed.append(buffer)
             guard let channels = buffer.floatChannelData else { return }
             let count = Int(buffer.frameLength), channelCount = Int(buffer.format.channelCount)
             var mono = [Float](repeating:0,count:count)
             for channel in 0..<channelCount { for i in 0..<count { mono[i] += channels[channel][i]/Float(channelCount) } }
-            audioContinuation.yield(AudioChunk(samples:mono,rate:buffer.format.sampleRate))
+            audioContinuation.yield(AudioChunk(samples:mono,rate:buffer.format.sampleRate,
+                sequence:sequence.next(),receivedAt:ProcessInfo.processInfo.systemUptime))
         }
         tapInstalled = true
         do { engine.prepare(); try engine.start() }
         catch { stop(); throw VoiceError("The microphone could not start. Check the selected input device.") }
-        segmentation = Task.detached(priority:.userInitiated) {
+        segmentation = Task.detached(priority:.userInitiated) { [weak self] in
             var segmenter = UtteranceSegmenter()
+            var continuity = AudioContinuity()
             let converter = AudioConverter()
+            defer { utterances.continuation.finish() }
+            func fail(_ message: String) async {
+                await self?.segmentationFailed(message,run:run)
+            }
             for await chunk in stream {
                 if Task.isCancelled { break }
+                guard continuity.accept(sequence:chunk.sequence) else {
+                    await fail("Microphone audio was interrupted. Start again and repeat the full command."); return
+                }
                 do {
                     let samples = try converter.resample(chunk.samples,from:chunk.rate)
-                    if let complete = segmenter.append(samples) { utterances.continuation.yield(complete) }
-                } catch { utterances.continuation.finish(); return }
+                    if let complete = segmenter.append(samples) {
+                        utterances.continuation.yield(Utterance(samples:complete,endedAt:chunk.receivedAt-segmenter.completedTrailingSilence))
+                    }
+                    if segmenter.discardedUtterances > 0 {
+                        await fail("That utterance was too long. Start again and keep each command under 15 seconds."); return
+                    }
+                } catch { await fail("Microphone audio could not be converted. Check your input device and start again."); return }
             }
-            utterances.continuation.finish()
         }
         processing = Task { [weak self] in
             guard let self else { return }
-            for await samples in utterances.stream {
+            for await utterance in utterances.stream {
                 guard !Task.isCancelled, generation == run else { return }
+                guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:ProcessInfo.processInfo.systemUptime) else {
+                    onError("Speech was delayed. Start again and repeat your command."); return
+                }
                 onTranscribing()
                 let start = ProcessInfo.processInfo.systemUptime
                 do {
                     var decoder = try TdtDecoderState()
-                    let result = try await manager.transcribe(samples,decoderState:&decoder)
+                    let result = try await manager.transcribe(utterance.samples,decoderState:&decoder)
                     guard !Task.isCancelled, generation == run else { return }
                     let ms = (ProcessInfo.processInfo.systemUptime-start)*1000
+                    guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:ProcessInfo.processInfo.systemUptime) else {
+                        onError("Transcription took too long. Start again and repeat your command."); return
+                    }
                     startStopMonitor()
-                    onTranscript(result.text,ms)
+                    onTranscript(SpeechTranscript(text:result.text,inferenceMilliseconds:ms,
+                        endToTranscriptMilliseconds:(ProcessInfo.processInfo.systemUptime-utterance.endedAt)*1000))
                 } catch {
                     guard !Task.isCancelled, generation == run else { return }
                     onError("Local transcription failed. Stop and start listening to try again.")
@@ -110,6 +131,9 @@ import VoiceCore
         engine.stop(); if tapInstalled { engine.inputNode.removeTap(onBus:0); tapInstalled = false }
         continuation?.finish(); continuation = nil
         segmentation?.cancel(); processing?.cancel(); segmentation = nil; processing = nil
+    }
+    private func segmentationFailed(_ message: String, run: UUID) {
+        guard generation == run else { return }; onError(message)
     }
     private func startStopMonitor() {
         monitorFeed.set(nil); monitor?.cancel(); monitorRenewal?.cancel()
@@ -135,7 +159,15 @@ import VoiceCore
         }
     }
 }
-private struct AudioChunk: Sendable { let samples: [Float]; let rate: Double }
+private struct AudioChunk: Sendable {
+    let samples: [Float]; let rate: Double; let sequence: UInt64; let receivedAt: TimeInterval
+}
+private struct Utterance: Sendable { let samples: [Float]; let endedAt: TimeInterval }
+private final class AudioSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+    func next() -> UInt64 { lock.lock(); defer { lock.unlock() }; let n = value; value &+= 1; return n }
+}
 /// Recognition request append is documented for audio callbacks; protect replacement against Stop.
 private final class RecognitionFeed: @unchecked Sendable {
     private let lock = NSLock()

@@ -33,12 +33,13 @@ import VoiceCore
     private var runTask: Task<Void,Never>?, downloadTask: Task<Void,Never>?
     private var foreground: NSRunningApplication?
     private var workspaceObserver: NSObjectProtocol?
-    private var currentGoal = ""
+    private var conversation = ConversationMemory()
+    private var pendingConfirmationID: UUID?
     private var epoch = UUID()
-    init(speech provider: SpeechProviding? = nil) {
+    init(speech provider: SpeechProviding? = nil, hasKey: () throws -> Bool = { try KeyStore.read() != nil }) {
         self.speech = provider ?? LocalSpeech()
         let speech = self.speech
-        do { keySaved = try KeyStore.read() != nil } catch { message = error.localizedDescription }
+        do { keySaved = try hasKey() } catch { message = error.localizedDescription }
         foreground = NSWorkspace.shared.frontmostApplication
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didActivateApplicationNotification,object:nil,queue:.main) { [weak self] note in
             Task { @MainActor in
@@ -48,7 +49,11 @@ import VoiceCore
             }
         }
         refreshPermissions()
-        speech.onTranscript = { [weak self] text,ms in self?.receive(text,ms:ms) }
+        speech.onTranscript = { [weak self] result in
+            guard let self, self.listening else { return }
+            self.timings["speech_end_to_transcript_ms"] = result.endToTranscriptMilliseconds
+            self.receive(result.text,ms:result.inferenceMilliseconds)
+        }
         speech.onStop = { [weak self] in self?.stop() }
         speech.onError = { [weak self] text in self?.stop(); self?.phase = .failed; self?.message = text }
         speech.onTranscribing = { [weak self] in
@@ -102,8 +107,9 @@ import VoiceCore
     }
     func cancelDownload() { downloadTask?.cancel() }
     func start() {
+        guard !listening else { return }
         refreshPermissions()
-        guard ready else { setupVisible = true; message = "Complete Setup to start listening."; return }
+        guard ready else { setupVisible = true; message = "Complete Setup to start listening."; showFeedback(); return }
         do {
             guard let key = try KeyStore.read(), !key.isEmpty else { throw VoiceError("Save your TypeSafe key first.") }
             let desktop = MacDesktop(); self.desktop = desktop
@@ -117,15 +123,19 @@ import VoiceCore
     func stop() {
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
         speech.stop(); listening = false; pending = nil; pendingImage = nil; pendingMarker = nil
+        pendingConfirmationID = nil; conversation.clear()
+        transcript = ""; loop = nil; desktop = nil
         phase = .stopped; message = "Stopped. No further actions will start."
     }
     func confirm(_ allowed: Bool) {
+        guard let id = pendingConfirmationID, let loop else { return }
         if allowed { hideAndRestoreTarget() }
         let run = epoch
         Task {
             if allowed { try? await Task.sleep(nanoseconds:200_000_000) }
             guard epoch == run else { return }
-            loop?.resolveConfirmation(allowed); pending = nil; pendingImage = nil; pendingMarker = nil
+            loop.resolveConfirmation(allowed,id:id)
+            if pendingConfirmationID == id { clearPending() }
         }
     }
     private func hideAndRestoreTarget() {
@@ -136,23 +146,24 @@ import VoiceCore
     private func receive(_ text: String, ms: Double) {
         guard listening else { return }
         timings["transcription_ms"] = ms; transcript = text
-        switch InputRouter.route(text,final:true,confirmationPending:pending != nil) {
+        let now = ProcessInfo.processInfo.systemUptime
+        switch InputRouter.route(text,final:true,confirmationPending:pending != nil,
+                                 correctionAllowed:conversation.acceptsCorrection(at:now,active:runTask != nil)) {
         case .stop: stop()
         case .confirm: confirm(true)
         case .cancel: confirm(false)
         case .ignore:
             if runTask == nil { phase = .listening }
-        case let .command(goal): begin(goal)
+        case let .command(goal): conversation.begin(goal,at:now); begin(goal)
         case let .correction(correction):
-            guard !currentGoal.isEmpty else { message = "Say ‘Hey Jev’ and the full command."; return }
-            let goal = "Original goal: \(currentGoal). User correction (takes priority): \(correction)"
+            guard let goal = conversation.correct(correction,at:now,active:runTask != nil) else { message = "Say ‘Hey Jev’ and the full command."; return }
             begin(goal,context:Array(loop?.history.suffix(3) ?? []))
-        case let .dictation(text): beginDictation(text)
+        case let .dictation(text): conversation.clear(); beginDictation(text)
         }
     }
     private func begin(_ goal: String, context: [HistoryEntry] = []) {
-        loop?.stop(); runTask?.cancel(); pending = nil; epoch = UUID(); let run = epoch
-        currentGoal = goal; hideAndRestoreTarget()
+        loop?.stop(); runTask?.cancel(); clearPending(); epoch = UUID(); let run = epoch
+        hideAndRestoreTarget()
         runTask = Task { [weak self] in
             guard let self, let loop else { return }
             do {
@@ -162,11 +173,12 @@ import VoiceCore
                 phase = .listening; message = "Goal finished. Listening for ‘Hey Jev’…"
             } catch is CancellationError { }
             catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
-            guard epoch == run else { return }; runTask = nil; pending = nil
+            guard epoch == run else { return }
+            conversation.finished(at:ProcessInfo.processInfo.systemUptime); runTask = nil; clearPending()
         }
     }
     private func beginDictation(_ text: String) {
-        loop?.stop(); runTask?.cancel(); pending = nil; epoch = UUID(); let run = epoch
+        loop?.stop(); runTask?.cancel(); clearPending(); epoch = UUID(); let run = epoch
         hideAndRestoreTarget()
         runTask = Task { [weak self] in
             guard let self, let desktop else { return }
@@ -188,6 +200,7 @@ import VoiceCore
     private func event(_ event: SessionEvent) {
         guard listening else { return }
         phase = event.phase; message = event.message; pending = loop?.pendingAction?.label
+        pendingConfirmationID = loop?.pendingConfirmationID
         if let observation = loop?.pendingObservation, let point = loop?.pendingAction?.point {
             pendingImage = observation.jpeg
             let g = observation.geometry
@@ -198,4 +211,7 @@ import VoiceCore
         if event.phase == .paused { showFeedback() }
     }
     private func showFeedback() { NSApp.unhide(nil); NSApp.activate(ignoringOtherApps:true) }
+    private func clearPending() {
+        pending = nil; pendingImage = nil; pendingMarker = nil; pendingConfirmationID = nil
+    }
 }

@@ -5,6 +5,23 @@ import VoiceCore
 @testable import MacVoice
 
 final class ScreenCaptureTests: XCTestCase {
+    func testTinyChangeAtVisualTargetInvalidatesClickEvenOnLargeWindow() throws {
+        let geometry = try ImageGeometry.fitted(crop:Rect(-100,200,1280,800))
+        func frame(changed: Bool) throws -> CapturedScreen {
+            let context = try XCTUnwrap(CGContext(data:nil,width:1280,height:800,bitsPerComponent:8,bytesPerRow:0,
+                space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(CGColor(gray:1,alpha:1)); context.fill(CGRect(x:0,y:0,width:1280,height:800))
+            if changed {
+                context.setFillColor(CGColor(gray:0,alpha:1)); context.fill(CGRect(x:630,y:390,width:4,height:4))
+            }
+            return try ScreenCapture.process(XCTUnwrap(context.makeImage()),geometry:geometry,redactions:[])
+        }
+        let first = try frame(changed:false), changed = try frame(changed:true)
+        let point = Point(540,600)
+        XCTAssertTrue(try ScreenCapture.targetUnchanged(previous:first.jpeg,current:first.jpeg,geometry:geometry,point:point))
+        XCTAssertFalse(try ScreenCapture.targetUnchanged(previous:first.jpeg,current:changed.jpeg,geometry:geometry,point:point))
+        XCTAssertThrowsError(try ScreenCapture.targetUnchanged(previous:first.jpeg,current:Data(),geometry:geometry,point:point))
+    }
     func testSecureRegionRedactionMatchesTopLeftPixelsAndPreservesOrientation() throws {
         let width = 400, height = 400
         var bytes = [UInt8](repeating:255,count:width*height*4)

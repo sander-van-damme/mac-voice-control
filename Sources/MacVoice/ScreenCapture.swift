@@ -8,6 +8,28 @@ struct CapturedScreen {
     let jpeg: Data, signature: [UInt8], geometry: ImageGeometry
 }
 enum ScreenCapture {
+    /// A global thumbnail can hide a changed icon. Compare actual color pixels around a visual click too.
+    static func targetUnchanged(previous: Data, current: Data, geometry: ImageGeometry, point: Point) throws -> Bool {
+        let center = try geometry.imagePoint(for:point)
+        let region = CGRect(x:max(0,Int(center.x)-32),y:max(0,Int(center.y)-32),width:64,height:64)
+            .intersection(CGRect(x:0,y:0,width:geometry.pixelWidth,height:geometry.pixelHeight)).integral
+        func pixels(_ data: Data) throws -> [UInt8] {
+            guard let source = CGImageSourceCreateWithData(data as CFData,nil),
+                  let image = CGImageSourceCreateImageAtIndex(source,0,nil),
+                  image.width == geometry.pixelWidth, image.height == geometry.pixelHeight,
+                  let patch = image.cropping(to:region) else { throw VoiceError("Could not verify the visual target.") }
+            var result = [UInt8](repeating:0,count:patch.width*patch.height*4)
+            let created = result.withUnsafeMutableBytes { raw -> Bool in
+                guard let context = CGContext(data:raw.baseAddress,width:patch.width,height:patch.height,
+                    bitsPerComponent:8,bytesPerRow:patch.width*4,space:CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                context.draw(patch,in:CGRect(x:0,y:0,width:patch.width,height:patch.height)); return true
+            }
+            guard created else { throw VoiceError("Could not verify visual pixels.") }; return result
+        }
+        let before = try pixels(previous), after = try pixels(current)
+        return zip(before,after).allSatisfy { abs(Int($0)-Int($1)) <= 24 }
+    }
     static func capture(window: Rect, redactions: [Rect]) async throws -> CapturedScreen {
         guard CGPreflightScreenCaptureAccess() else { throw VoiceError("Enable Screen Recording in System Settings, then quit and reopen Mac Voice Control.") }
         let shareable = try await SCShareableContent.excludingDesktopWindows(true,onScreenWindowsOnly:true)
