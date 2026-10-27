@@ -13,7 +13,7 @@ import Carbon
             guard let event, let context else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
             guard GetEventParameter(event,EventParamName(kEventParamDirectObject),EventParamType(typeEventHotKeyID),nil,
-                                    UInt32(MemoryLayout<EventHotKeyID>.size),nil,&id) == noErr else { return OSStatus(eventNotHandledErr) }
+                                    MemoryLayout<EventHotKeyID>.size,nil,&id) == noErr else { return OSStatus(eventNotHandledErr) }
             let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
             MainActor.assumeIsolated {
                 let owner = Unmanaged<VoiceShortcuts>.fromOpaque(context).takeUnretainedValue()
@@ -25,7 +25,7 @@ import Carbon
                 }
             }
             return noErr
-        },UInt32(events.count),&events,Unmanaged.passUnretained(self).toOpaque(),&handler)
+        },events.count,&events,Unmanaged.passUnretained(self).toOpaque(),&handler)
         guard result == noErr else { model.message = "Global shortcuts could not be installed. Use the menu-bar controls."; return }
         for (id,key,modifiers) in [(UInt32(1),UInt32(kVK_Space),UInt32(controlKey|optionKey)),
                                    (2,UInt32(kVK_Space),UInt32(cmdKey|optionKey)),

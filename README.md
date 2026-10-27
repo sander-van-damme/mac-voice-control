@@ -33,6 +33,8 @@ After the first successful model load in this version, subsequent launches autom
 
 ### Optional ChatGPT language assistance
 
+Setup offers **ChatGPT OAuth** or **OpenAI API key** authentication. To use an API key, select that option, save the key in Keychain, enter an API-accessible model ID, and enable language assistance. No OAuth connection is needed for API-key mode. API usage is billed separately from a ChatGPT subscription.
+
 In Setup, choose **Continue with ChatGPT**, complete browser sign-in, and authorize ChatGPT plan usage. Select an available model and enable **Use ChatGPT for language assistance**. GPT-6 Luna is the initial preference; model access depends on your account. No Codex CLI, OpenAI API key, or local LLM download is required. If you decline plan usage, Jev and local speech remain available with language assistance off.
 
 Commands and recent action outcomes go to OpenAI when assistance is needed. **Share screen context with ChatGPT** separately enables screenshot and bounded Accessibility context, needed for requests about visible content. Audio stays local. Requests use your ChatGPT plan limits. Credentials are stored in this Mac's Keychain. See [language assistance](docs/language-assistance.md) for behavior, cancellation, and validation limits.
