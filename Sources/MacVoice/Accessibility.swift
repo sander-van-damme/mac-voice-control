@@ -3,7 +3,10 @@ import ApplicationServices
 import VoiceCore
 
 struct AXSnapshot {
-    let pid: pid_t, window: AXUIElement, frame: Rect
+    let pid: pid_t
+    let window: AXUIElement?
+    let frame: Rect
+    var visualWindow: VisibleWindow? = nil
     let controls: [Control], references: [String: AXUIElement]
     let focusedID: String?, secureFocus: Bool, secureRegions: [Rect], incomplete: Bool
 }
@@ -56,13 +59,13 @@ final class AccessibilityReader: @unchecked Sendable {
     static func focusedElement(_ pid: pid_t) -> AXUIElement? {
         element(attribute(AXUIElementCreateApplication(pid),kAXFocusedUIElementAttribute))
     }
-    func read(pid: pid_t, chromium: Bool) async throws -> AXSnapshot {
+    func read(pid: pid_t, chromium: Bool, fallback: VisibleWindow? = nil) async throws -> AXSnapshot {
         try Task.checkCancellation()
         return try await withCheckedThrowingContinuation { continuation in
-            queue.async { continuation.resume(with: Result { try self.collect(pid: pid, chromium: chromium) }) }
+            queue.async { continuation.resume(with: Result { try self.collect(pid: pid, chromium: chromium, fallback:fallback) }) }
         }
     }
-    private func collect(pid: pid_t, chromium: Bool) throws -> AXSnapshot {
+    private func collect(pid: pid_t, chromium: Bool, fallback: VisibleWindow?) throws -> AXSnapshot {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system,0.08)
         let app = AXUIElementCreateApplication(pid)
@@ -73,11 +76,15 @@ final class AccessibilityReader: @unchecked Sendable {
             AXUIElementSetAttributeValue(app,"AXManualAccessibility" as CFString,kCFBooleanTrue)
             enabledProcesses.insert(pid); lastPoke[pid] = Date()
         }
-        guard let window = Self.focusedWindow(pid), let frame = Self.frame(window) else {
-            throw VoiceError("No accessible foreground window. Open an application window and try again.")
-        }
         let focused = Self.focusedElement(pid)
         let secureFocus = focused.map(Self.secure) ?? false
+        guard let window = Self.focusedWindow(pid), let frame = Self.frame(window) else {
+            guard let fallback = fallback ?? WindowCatalog.foreground(pid:pid,windows:WindowCatalog.current()),
+                  fallback.pid == pid else { throw VoiceError("No visible foreground window. Open an application window and try again.") }
+            let regions = secureFocus ? focused.flatMap(Self.frame).map { [$0] } ?? [] : []
+            return AXSnapshot(pid:pid,window:nil,frame:fallback.frame,visualWindow:fallback,
+                controls:[],references:[:],focusedID:nil,secureFocus:secureFocus,secureRegions:regions,incomplete:true)
+        }
         var nodes: [(AXUIElement,Int)] = [(window,0)], visited = Set<CFHashCode>()
         var controls: [Control] = [], refs: [String: AXUIElement] = [:], regions: [Rect] = []
         var focusedID: String?, webArea = false, count = 0

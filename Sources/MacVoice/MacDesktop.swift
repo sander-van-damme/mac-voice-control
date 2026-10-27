@@ -41,8 +41,7 @@ import VoiceCore
         let screen = try await ScreenCapture.capture(window:ax.frame,redactions:ax.secureRegions)
         try Task.checkCancellation()
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
-              let current = AccessibilityReader.focusedWindow(app.processIdentifier), CFEqual(current,ax.window),
-              AccessibilityReader.frame(current)?.near(ax.frame) == true else { throw VoiceError("The foreground window changed during capture. Please try again.") }
+              windowUnchanged(ax) else { throw VoiceError("The foreground window changed during capture. Please try again.") }
         var o = Observation(pid:app.processIdentifier,app:app.localizedName ?? "Application",window:ax.frame,controls:ax.controls,
             focusedID:ax.focusedID,secureFocus:ax.secureFocus,accessibilityIncomplete:ax.incomplete,
             geometry:screen.geometry,jpeg:screen.jpeg,signature:screen.signature)
@@ -77,10 +76,17 @@ import VoiceCore
     private func basicGuard(_ o: Observation, ax: AXSnapshot) -> Bool {
         guard AXIsProcessTrusted(), !IsSecureEventInputEnabled(),
               NSWorkspace.shared.frontmostApplication?.processIdentifier == o.pid,
-              let window = AccessibilityReader.focusedWindow(o.pid), CFEqual(window,ax.window),
-              AccessibilityReader.frame(window)?.near(o.window) == true else { return false }
+              windowUnchanged(ax) else { return false }
         if let focus = AccessibilityReader.focusedElement(o.pid), AccessibilityReader.secure(focus) { return false }
         return true
+    }
+    private func windowUnchanged(_ ax: AXSnapshot) -> Bool {
+        if let old = ax.window {
+            guard let current = AccessibilityReader.focusedWindow(ax.pid) else { return false }
+            return CFEqual(current,old) && AccessibilityReader.frame(current)?.near(ax.frame) == true
+        }
+        guard let old = ax.visualWindow else { return false }
+        return WindowCatalog.unchanged(old,windows:WindowCatalog.current())
     }
     func execute(_ action: Action, observed o: Observation) async throws {
         try Task.checkCancellation()
@@ -95,13 +101,23 @@ import VoiceCore
             guard error == .success else { throw VoiceError("The application refused the accessibility action. Try describing a visual target.") }
         case .visualClick:
             guard let p = action.point, o.geometry.desktopCrop.contains(p) else { throw VoiceError("Invalid visual click.") }
+            if let window = ax.visualWindow {
+                guard WindowCatalog.exposed(window,at:p,windows:WindowCatalog.current()) else { throw VoiceError("Another window is covering the visual target.") }
+            }
             var hit: AXUIElement?
-            guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),Float(p.x),Float(p.y),&hit) == .success,
-                  let hit, !AccessibilityReader.secure(hit) else { throw VoiceError("The visual target cannot be verified safely.") }
-            var pid: pid_t = 0; AXUIElementGetPid(hit,&pid)
-            guard pid == o.pid else { throw VoiceError("Another window is covering the visual target.") }
+            let hitResult = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),Float(p.x),Float(p.y),&hit)
+            if hitResult == .success, let hit {
+                guard !AccessibilityReader.secure(hit) else { throw VoiceError("The target is a secure control.") }
+                var pid: pid_t = 0; AXUIElementGetPid(hit,&pid)
+                guard pid == o.pid else { throw VoiceError("Another window is covering the visual target.") }
+            } else {
+                guard let window = ax.visualWindow,
+                      WindowCatalog.exposed(window,at:p,windows:WindowCatalog.current()) else {
+                    throw VoiceError("The visual target cannot be verified safely.")
+                }
+            }
             try Task.checkCancellation()
-            if AccessibilityReader.actions(hit).contains(kAXPressAction),
+            if let hit, hitResult == .success, AccessibilityReader.actions(hit).contains(kAXPressAction),
                ["AXButton","AXLink","AXCheckBox","AXRadioButton"].contains(AccessibilityReader.attribute(hit,kAXRoleAttribute) as? String ?? "") {
                 guard AXUIElementPerformAction(hit,kAXPressAction as CFString) == .success else { throw VoiceError("The visual control refused the action.") }
             } else {
