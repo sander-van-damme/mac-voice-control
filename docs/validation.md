@@ -1,4 +1,24 @@
-# Validation record — 26 October 2026
+# Validation record
+
+## 27 October 2026 — independent follow-up
+
+The application foundation from PR #1 was reviewed independently and extended in [PR #2](https://github.com/sander-van-damme/mac-voice-control/pull/2). Review sources and the before-implementation decisions are in [research-follow-up.md](research-follow-up.md).
+
+| Check | Exact evidence | Outcome |
+|---|---|---|
+| Portable core tests | Linux x86_64, Swift 6.2.1; final core at `f9826772a8b8bc34b7b66b23399b457d5a79d14f` | 52 XCTest cases passed, 0 failures; no API key or speech weights |
+| Native tests, GUI compilation, release compilation, app signature integrity, DMG integrity and artifact upload | [macOS run 40503721165](https://github.com/sander-van-damme/mac-voice-control/actions/runs/40503721165), packaged revision `786ed994eb9c7839a8236417897eb3a575d7fd81`; Apple Silicon, Xcode 26.3 / Swift 6.2.4 | 65 XCTest cases passed; development DMG produced |
+| Workflow and auxiliary syntax | actionlint 1.7.7, bash syntax, Python AST, plist/JSON parsing, manual fixture JavaScript syntax, git diff checks | Passed |
+
+[Download the development artifact](https://github.com/sander-van-damme/mac-voice-control/actions/runs/40503721165). The artifact contains the DMG, its SHA-256, and the pinned dependency lockfile. It requires GitHub sign-in and expires according to the run's retention policy. It is ad-hoc signed and not notarized. The final documentation-only commit does not change the packaged application code or bundled notices.
+
+New executable coverage includes decision/observation binding, stale confirmation IDs, delayed expiry timers, expiry during target checks, cancellation at the execution boundary and during consent, bounded correction authority, missing audio chunks, stale transcripts, bilingual synthetic routing, GUI download cancellation/retry, late speech after Stop, sleep-triggered stopping, local visual-pixel changes, and window-server fallback identity/occlusion checks. Synthetic native windows/pixels and a simulated sleep notification do not establish real desktop or hardware behavior.
+
+Implemented follow-up behavior includes a screenshot-only fallback when an app exposes no AX window, explicit screenshot/window coordinate metadata for Jev, deadlines that advance across sleep, and complete bundled fastcluster BSD attribution. The source and packaged development application are delivered; the full real-world product acceptance criteria remain unverified.
+
+The remaining release gates are unchanged: real microphone Dutch/English/code-switching accuracy, live TypeSafe image decisions, actual Chrome/native-app actions, screen capture on multiple displays, permission recovery and hardware interruption, calibrated confidence thresholds, measured end-to-end performance, Developer ID signing and Apple notarization. No credentials or real Mac desktop were supplied for these checks. Optional Codex, OCR and automatic zoom refinement remain documented later milestones.
+
+## 26 October 2026 — original implementation
 
 This is an experimental development build, not a validated production voice assistant.
 
