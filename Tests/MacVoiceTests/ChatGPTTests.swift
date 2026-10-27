@@ -74,3 +74,30 @@ final class ChatGPTIdentityTests: XCTestCase {
         do { _ = try await OpenAIIdentity.verify(message+"."+encoded(bad),clientID:"test-client",nonce:"test-nonce",session:session); XCTFail("Forged signature accepted") } catch { }
     }
 }
+
+@MainActor final class ChatGPTCallbackTests: XCTestCase {
+    func testLoopbackRejectsWrongStateThenCompletesBrowserRedirect() async throws {
+        let listener = OAuthLoopback(state:"fixture-state")
+        defer { listener.cancel() }
+        let redirect = try await listener.start()
+        XCTAssertEqual(redirect.host,"127.0.0.1")
+        XCTAssertEqual(redirect.path,"/auth/callback")
+        var wrong = URLRequest(url:URL(string:redirect.absoluteString+"?state=wrong&code=fixture&client_id=oaiapp_fixture")!)
+        wrong.timeoutInterval = 5
+        let (_,rejected) = try await URLSession.shared.data(for:wrong)
+        XCTAssertEqual((rejected as? HTTPURLResponse)?.statusCode,400)
+        var correct = URLRequest(url:URL(string:redirect.absoluteString+"?state=fixture-state&code=fixture&client_id=oaiapp_fixture")!)
+        correct.timeoutInterval = 5
+        let (_,accepted) = try await URLSession.shared.data(for:correct)
+        XCTAssertEqual((accepted as? HTTPURLResponse)?.statusCode,200)
+        let callback = try await listener.result()
+        XCTAssertEqual(try OAuthValidation.callback(callback,redirect:redirect,state:"fixture-state",clientID:nil).clientID,"oaiapp_fixture")
+    }
+    func testCancellingLoopbackReleasesWaitingSignIn() async throws {
+        let listener = OAuthLoopback(state:"fixture-state")
+        _ = try await listener.start()
+        listener.cancel()
+        do { _ = try await listener.result(); XCTFail("Cancelled sign-in returned a callback") }
+        catch is CancellationError { }
+    }
+}
