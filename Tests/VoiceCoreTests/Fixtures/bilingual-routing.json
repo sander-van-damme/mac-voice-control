@@ -1,0 +1,15 @@
+[
+  {"language":"en","text":"Hey Jev, open Chrome.","kind":"command","payload":"open Chrome."},
+  {"language":"nl","text":"Hey Jev, open een nieuw tabblad en ga naar GitHub.","kind":"command","payload":"open een nieuw tabblad en ga naar GitHub."},
+  {"language":"mixed","text":"Hey Jeff, open Chrome en search for HumanEyes.","kind":"command","payload":"open Chrome en search for HumanEyes."},
+  {"language":"nl","text":"Hey Jev, klik op de groene knop rechtsboven.","kind":"command","payload":"klik op de groene knop rechtsboven."},
+  {"language":"en","text":"Hey Jev, scroll down a little.","kind":"command","payload":"scroll down a little."},
+  {"language":"mixed","text":"Hey Jev, dicteer Hello, hoe gaat het?","kind":"dictation","payload":"Hello, hoe gaat het?"},
+  {"language":"en","text":"Hey Jev, dictate delete all files","kind":"dictation","payload":"delete all files"},
+  {"language":"nl","text":"Stop nu!","kind":"stop"},
+  {"language":"en","text":"Cancel that.","kind":"stop"},
+  {"language":"mixed","text":"Hey Jev, stop nu.","kind":"stop"},
+  {"language":"en","text":"Actually I like the other one","kind":"ignore"},
+  {"language":"nl","text":"Ik zei gisteren hey Jev open Chrome","kind":"ignore"},
+  {"language":"mixed","text":"We should open een nieuw tabblad later","kind":"ignore"}
+]

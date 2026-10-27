@@ -1,0 +1,44 @@
+name: Build and test
+on:
+  push:
+    branches: ['main', 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          swift --version
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .build/checkouts
+          key: macvoice-checkouts-${{ runner.arch }}-${{ hashFiles('Package.swift', 'Package.resolved') }}
+      - name: Resolve dependencies
+        run: swift package resolve
+      - name: Test actual core and compile app
+        run: swift test --parallel
+      - name: Package unsigned development app
+        run: bash scripts/package.sh
+      - name: Upload installable development artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Mac-Voice-Control-arm64-development
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+            Package.resolved
+          retention-days: 14
+          if-no-files-found: error

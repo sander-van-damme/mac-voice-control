@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac Voice Control · Desktop acceptance fixture</title>
+<style>
+body { font: 17px system-ui; margin: 3rem auto; max-width: 740px; padding: 1rem; background: #f3f7f8; color: #142f36 }
+section { background: white; border: 1px solid #ccdadd; border-radius: 12px; padding: 1.4rem; margin: 1.2rem 0 }
+button, input { font: inherit; padding: .6rem; margin: .4rem }
+button { cursor: pointer } label { display: block } output { font-weight: 700 }
+canvas { display: block; border: 1px solid #ccdadd; margin-top: 1rem }
+</style>
+<h1>Desktop acceptance fixture</h1>
+<p>Disposable local controls. No requests, storage, real messages, payments or deletions. Open this file in Chrome on your Mac.</p>
+<section>
+<h2>Labelled controls</h2>
+<button id="next">Next / Volgende</button>
+<p>Step: <output id="step">0</output></p>
+<label>Search / Zoeken <input id="query" type="text" placeholder="HumanEyes"></label>
+<button id="search">Search / Zoek</button>
+<p id="results" role="status">No search yet / Nog niet gezocht</p>
+</section>
+<section>
+<h2>Visual control without an accessible child</h2>
+<p>Say: “Hey Jev, klik op de groene knop rechtsboven in het witte vlak.” Confirm the preview. The canvas has no AX button child.</p>
+<canvas id="visual" width="620" height="140"></canvas>
+<p id="visual-result" role="status">Not clicked / Niet geklikt</p>
+</section>
+<section>
+<h2>Dictation and dummy password</h2>
+<label>Notes / Notities <input type="text" id="notes" placeholder="Dictate here / Dicteer hier"></label>
+<label>Dummy password / Testwachtwoord <input type="password" value="DUMMY-NOT-A-REAL-SECRET" autocomplete="off"></label>
+<p>Known password pixels should be masked; focusing the password must block computer control. Never enter a real secret here.</p>
+</section>
+<section>
+<h2>Confirmation and stale target</h2>
+<button id="send">Send test message / Verstuur testbericht</button>
+<p>Confirmed sends: <output id="sent">0</output></p>
+<button id="moving">Start changing the visual target</button>
+<p>While a visual confirmation is pending, change the target, then approve. The old target must be rejected.</p>
+</section>
+<script>
+let steps = 0, sends = 0, shifted = false;
+document.querySelector('#next').onclick = () => document.querySelector('#step').textContent = ++steps;
+document.querySelector('#search').onclick = () => {
+  const results = document.querySelector('#results'); results.textContent = 'Loading / Laden…';
+  setTimeout(() => { results.textContent = 'First result / Eerste resultaat: ' + document.querySelector('#query').value; }, 1200);
+};
+document.querySelector('#send').onclick = () => document.querySelector('#sent').textContent = ++sends;
+const canvas = document.querySelector('#visual'), ctx = canvas.getContext('2d');
+function draw() {
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,620,140);
+  ctx.fillStyle = '#07865f'; ctx.fillRect(shifted ? 400 : 530,20,64,48);
+  ctx.fillStyle = '#fff'; ctx.font = '30px system-ui'; ctx.fillText('✓',shifted ? 420 : 550,55);
+}
+draw();
+canvas.onclick = e => {
+  const r = canvas.getBoundingClientRect(), x = (e.clientX-r.left)*620/r.width, y = (e.clientY-r.top)*140/r.height;
+  const left = shifted ? 400 : 530;
+  if (x >= left && x <= left+64 && y >= 20 && y <= 68) document.querySelector('#visual-result').textContent = 'Clicked / Geklikt';
+};
+document.querySelector('#moving').onclick = () => setTimeout(() => { shifted = !shifted; draw(); }, 3000);
+</script>
+</html>
