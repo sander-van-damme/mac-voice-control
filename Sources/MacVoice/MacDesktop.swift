@@ -175,7 +175,7 @@ import VoiceCore
             try Task.checkCancellation()
             guard let url = FileManager.default.urls(for:.downloadsDirectory,in:.userDomainMask).first, NSWorkspace.shared.open(url) else { throw VoiceError("Could not open Downloads.") }
         case .wait: break
-        case .done,.clarify: throw VoiceError("Non-executable decision.")
+        case .done,.clarify,.requestLanguage: throw VoiceError("Non-executable decision.")
         }
     }
 }

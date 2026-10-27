@@ -60,14 +60,13 @@ public enum InputRouter {
 
 public struct Candidates: Sendable {
     public let controls: [Control], apps: [AppCandidate], texts: [String], urls: [String]
-    public init(goal: String, observation: Observation, apps: [AppCandidate]) {
+    public init(goal: String, observation: Observation, apps: [AppCandidate], preparedTexts: [String] = []) {
         controls = observation.controls.filter { $0.enabled && !$0.secure }
         // Goal matches first, then running/common apps; deterministic tie order.
         self.apps = Array(apps.sorted {
             let a = $0.mentioned(in:goal), b = $1.mentioned(in:goal)
             return a != b ? a : $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }.prefix(40))
-        texts = Self.spans(goal)
         var found: [String] = []
         let pattern = #"(?:https?://)?(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:/[^\s\"']*)?"#
         if let regex = try? NSRegularExpression(pattern: pattern) {
@@ -80,6 +79,10 @@ public struct Candidates: Sendable {
         }
         for (name,url) in [("github","https://github.com"),("google","https://www.google.com"),("gmail","https://mail.google.com")] where goal.localizedCaseInsensitiveContains(name) { found.append(url) }
         urls = Array(Self.unique(found).filter(Self.safeURL).prefix(12))
+        let literalURLs = urls.flatMap { url in
+            [url,url.replacingOccurrences(of:#"^https?://"#,with:"",options:.regularExpression)]
+        }.filter { goal.contains($0) }
+        texts = Array(Self.unique(preparedTexts + literalURLs + Self.spans(goal)).prefix(24))
     }
     public static func safeURL(_ value: String) -> Bool {
         guard let u = URLComponents(string: value), ["https","http"].contains(u.scheme?.lowercased() ?? ""),
@@ -93,7 +96,7 @@ public struct Candidates: Sendable {
         let bounded = String(goal.prefix(1000))
         var values: [String] = []
         let patterns = [#"[\"“]([^\"”]+)[\"”]"#, #"'([^']+)'"#,
-                        #"(?i)(?:type|typ|schrijf|search for|search|zoek naar|zoek|dictate|dicteer)\s+(.+)"#]
+                        #"(?i)(?:type|typ|enter|voer in|schrijf|search for|search|zoek naar|zoek|dictate|dicteer)\s+(.+)"#]
         for pattern in patterns {
             guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
             for m in re.matches(in: bounded, range: NSRange(bounded.startIndex..., in: bounded)) {
