@@ -34,7 +34,7 @@ import VoiceCore
     }
     func installShortcuts() { if shortcuts == nil { shortcuts = VoiceShortcuts(model:self) } }
     func toggleContinuous() {
-        if listening { stop() } else { voiceMode = .continuous; start() }
+        if listening && voiceMode == .continuous { stop() } else { voiceMode = .continuous; start() }
     }
     func beginPushToTalk() {
         guard !holdingToTalk, !pushWaiting else { return }

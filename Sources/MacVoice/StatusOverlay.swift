@@ -99,7 +99,7 @@ struct ChatGPTSetupView: View {
                 if !model.apiKeyAuth {
                 Button("Use another ChatGPT account") { model.stop(); account.signIn(newAccount:true) }.font(.caption).disabled(account.busy)
                 }
-                Toggle("Use ChatGPT for language assistance",isOn:$model.languageEnabled)
+                Toggle("Use language assistance",isOn:$model.languageEnabled)
                 if model.apiKeyAuth || account.models.isEmpty {
                     TextField("Model ID",text:$account.model)
                 } else {

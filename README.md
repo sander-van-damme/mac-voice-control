@@ -39,7 +39,9 @@ Commands and recent action outcomes go to OpenAI when assistance is needed. **Sh
 
 ## Use it
 
-Open the app you want to control, then click **Start listening**. The control window hides; a nonactivating overlay shows the recognized command, status, confirmations, and **Stop**. It stays above other apps without taking keyboard focus. The menu-bar controls remain available. Begin each command with **Hey Jev**. The recognition variant **Hey Jeff** is accepted.
+Choose a voice mode in Setup or the menu bar. **Continuous commands** accepts each spoken command without a wake phrase until stopped. **Push to talk** captures a full sentence while **Control–Option–Space** is held, including pauses, then submits it on release. **Command–Option–Space** toggles continuous commands, and **Control–Option–Period** stops immediately. These global shortcuts work while other apps are active. Touch Bar buttons for continuous commands and Stop appear while Mac Voice Control is active; they do not install a global Control Strip item.
+
+In **Wake phrase** mode, click **Start listening** and begin each command with **Hey Jev** (or **Hey Jeff**). The control window hides; a nonactivating overlay shows transcript, status, confirmations, and **Stop**. Push-to-talk and continuous commands use the same local transcription and guarded execution as wake-phrase mode.
 
 - “Hey Jev, open Chrome.”
 - “Hey Jev, open een nieuw tabblad en ga naar GitHub.”
@@ -65,7 +67,7 @@ Sensitive actions pause and show the proposed action. Say **confirm / bevestig**
 - Known secure AX fields are masked, secure focus blocks control, unknown text focus blocks typing, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
 - The app controls the foreground window on the display with the largest overlap. A window spanning displays is cropped to one display; offscreen controls require scrolling or moving the window. Moving/resizing/switching windows during a decision causes re-observation or a safe stop.
 - Chrome's AX tree is incomplete on some sites, dense tab strips, canvas apps, rich editors, and loading pages. Vision remains first-class. Google Docs, Gmail, Miro, and actual Chrome end-to-end flows still need manual validation.
-- Automatic OCR, target zoom refinement, background-window control, Intel support, global voice shortcuts, Touch Bar controls, and wake-free listening are later milestones. No shell or arbitrary code execution is exposed to either model.
+- Automatic OCR, target zoom refinement, background-window control, Intel support, and configurable shortcut bindings are later milestones. No shell or arbitrary code execution is exposed to either model.
 - Confidence gates and safety classification reduce risk but do not establish correctness. This is supervised experimental software.
 
 ## Troubleshooting
