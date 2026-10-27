@@ -128,7 +128,7 @@ import VoiceCore
     func start() {
         guard !listening else { return }
         refreshPermissions()
-        guard ready else { setupVisible = true; message = "Complete Setup to start listening."; showFeedback(); return }
+        guard ready else { setupVisible = true; message = "Complete Setup to start listening."; showSetup(); return }
         do {
             guard let key = try KeyStore.read(), !key.isEmpty else { throw VoiceError("Save your TypeSafe key first.") }
             let desktop = MacDesktop(); self.desktop = desktop
@@ -139,10 +139,11 @@ import VoiceCore
                 languageScreenContext:languageScreenContext); self.loop = loop
             loop.onEvent = { [weak self] event in self?.event(event) }
             try speech.start(); listening = true; phase = .listening
+            setupVisible = false
             message = "Say ‘Hey Jev’ followed by a command. Say ‘stop’ to stop."
             hideAndRestoreTarget()
             showStatus()
-        } catch { phase = .failed; message = error.localizedDescription }
+        } catch { phase = .failed; message = error.localizedDescription; showStatus() }
     }
     func stop() {
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
@@ -249,9 +250,13 @@ import VoiceCore
         showStatus()
     }
     private func showFeedback() {
-        if setupVisible || !ready, let app = NSApp {
-            app.unhide(nil); app.activate(ignoringOtherApps:true)
-        } else { showStatus() }
+        showStatus()
+    }
+    private func showSetup() {
+        guard let app = NSApp else { return }
+        app.unhide(nil)
+        app.windows.first(where:{$0.title == "Mac Voice Control"})?.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps:true)
     }
     private func showStatus() {
         guard NSApp != nil else { return }
