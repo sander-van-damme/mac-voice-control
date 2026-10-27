@@ -16,6 +16,8 @@ final class VoiceModeTests: XCTestCase {
         try buffer.append([Float](repeating:0.3,count:2000))
         XCTAssertEqual(buffer.finish().count,20000)
         XCTAssertTrue(buffer.finish().isEmpty)
+        try buffer.append([Float](repeating:0,count:32000))
+        XCTAssertTrue(buffer.finish().isEmpty,"A silent hold must not be sent to ASR")
     }
     func testLongHeldSentenceCannotBecomeTruncatedCommand() throws {
         var buffer = PushToTalkBuffer()
