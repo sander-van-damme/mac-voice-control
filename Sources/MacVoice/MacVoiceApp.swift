@@ -61,7 +61,7 @@ struct MainView: View {
             Button { model.listening ? model.stop() : model.start() } label: {
                 Label(model.listening ? "Stop" : "Start listening",systemImage:model.listening ? "stop.fill" : "mic.fill")
                     .font(.title3.weight(.semibold)).frame(maxWidth:.infinity).padding(.vertical,12)
-            }.buttonStyle(.borderedProminent).tint(model.listening ? .red : .teal).keyboardShortcut(.escape,modifiers:[])
+            }.buttonStyle(.borderedProminent).tint(model.listening ? .red : .teal)
             if let pending = model.pending {
                 VStack(alignment:.leading,spacing:10) {
                     Label("Your confirmation is needed",systemImage:"hand.raised.fill").font(.headline)
@@ -94,6 +94,7 @@ struct MainView: View {
         }.padding(26).frame(width:520)
       }.frame(width:520,height:680)
         .onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
+        .onExitCommand { model.stop() }
     }
 }
 private struct VisualPreview: View {
