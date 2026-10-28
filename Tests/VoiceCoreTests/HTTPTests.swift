@@ -44,7 +44,18 @@ private final class MockHTTP: URLProtocol {
         var calls = 0
         MockHTTP.handler = { request in
             calls += 1
-            let root = try XCTUnwrap(JSONSerialization.jsonObject(with:try XCTUnwrap(request.httpBody)) as? [String:Any])
+            var body = request.httpBody ?? Data()
+            if body.isEmpty, let stream = request.httpBodyStream {
+                stream.open(); defer { stream.close() }
+                var buffer = [UInt8](repeating:0,count:4096)
+                while true {
+                    let count = stream.read(&buffer,maxLength:buffer.count)
+                    guard count >= 0 else { throw stream.streamError ?? URLError(.cannotDecodeContentData) }
+                    if count == 0 { break }
+                    body.append(contentsOf:buffer.prefix(count))
+                }
+            }
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with:body) as? [String:Any])
             let questions = try XCTUnwrap(root["questions"] as? [String:Any])
             if calls == 1 { XCTAssertEqual(Set(questions.keys),Set(["operation","is_command","complete","sensitive"])) }
             else {
