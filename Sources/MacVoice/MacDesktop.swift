@@ -47,6 +47,19 @@ import VoiceCore
         let text = goal.lowercased().trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters))
         let shortcuts: [String:Shortcut] = ["open a new tab":.newTab,"new tab":.newTab,"open een nieuw tabblad":.newTab,"press enter":.enter,"druk op enter":.enter,"press escape":.escape,"go back":.back]
         if let shortcut = shortcuts[text] { var a = Action(.shortcut,label:"Key: " + shortcut.rawValue); a.shortcut = shortcut; return a }
+        let scrolls: [String:Int] = ["scroll down":-5,"scroll up":5,"scroll down a little":-5,"scroll up a little":5,"scroll naar beneden":-5,"scroll naar boven":5]
+        if let amount = scrolls[text] { var a = Action(.scroll,label:text); a.scroll = amount; return a }
+        if let prefix = ["type ","typ "].first(where:{goal.lowercased().hasPrefix($0)}),
+           goal.range(of:#"\s+(?:and|en|then|daarna)\s+(?:click|open|press|klik|druk|ga)\b"#,options:[.regularExpression,.caseInsensitive]) == nil,
+           let id = observation.focusedID,
+           observation.controls.contains(where:{$0.id == id && $0.canFocus && !$0.secure}) {
+            var payload = String(goal.dropFirst(prefix.count))
+            if payload.count >= 2, let first = payload.first, let last = payload.last,
+               (first == "\"" && last == "\"") || (first == "'" && last == "'") { payload = String(payload.dropFirst().dropLast()) }
+            if (try? InsertionSafety.validate(payload)) != nil {
+                var a = Action(.typeText,label:"Insert requested text"); a.target = id; a.text = payload; return a
+            }
+        }
         if text.hasPrefix("minimize ") || text.hasPrefix("minimaliseer ") {
             let names = apps.filter { $0.mentioned(in:text) }
             guard names.count == 1, names[0].mentioned(in:observation.app) else { return nil }

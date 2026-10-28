@@ -21,6 +21,16 @@ import VoiceCore
 }
 
 @MainActor final class AppModelTests: XCTestCase {
+    func testBasicCommandsResolveWithoutModelDecisions() throws {
+        let desktop = MacDesktop(), frame = Rect(0,0,800,600)
+        let o = Observation(pid:1,app:"Chrome",window:frame,
+            controls:[Control(id:"field",role:"AXTextField",label:"Address bar",frame:Rect(0,0,100,20),canFocus:true)],
+            focusedID:"field",geometry:try .fitted(crop:frame),jpeg:Data(),signature:[])
+        XCTAssertEqual(desktop.directAction("Open a new tab.",observation:o)?.shortcut,.newTab)
+        XCTAssertEqual(desktop.directAction("Scroll down.",observation:o)?.scroll,-5)
+        XCTAssertEqual(desktop.directAction("Type Google.com",observation:o)?.text,"Google.com")
+        XCTAssertNil(desktop.directAction("Type hello and click Send",observation:o))
+    }
     func testOverlayAnchorSurvivesRepeatedContentAndConfirmationChanges() async throws {
         _ = NSApplication.shared
         let model = AppModel(speech:FakeSpeech(),hasKey:{ false })
