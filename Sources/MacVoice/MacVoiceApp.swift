@@ -6,7 +6,7 @@ import VoiceCore
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene {
         WindowGroup("Mac Voice Control",id:"main") {
-            MainView(model:model).onAppear { delegate.model = model }
+            MainView(model:model).onAppear { delegate.model = model; model.installShortcuts() }
                 .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)) { _ in model.shutdown() }
         }
         .defaultSize(width:520,height:600)
@@ -15,6 +15,10 @@ import VoiceCore
             Text(model.phase.rawValue)
             Text(model.message).font(.caption)
             Divider()
+            Picker("Voice mode",selection:$model.voiceMode) {
+                ForEach(AppModel.VoiceMode.allCases,id:\.self) { Text($0.rawValue).tag($0) }
+            }
+            Button(model.listening && model.voiceMode == .continuous ? "Stop continuous commands" : "Start continuous commands") { model.toggleContinuous() }
             Button(model.listening ? "Stop" : "Start") { model.listening ? model.stop() : model.start() }
             if model.pending != nil {
                 Button("Confirm action") { model.confirm(true) }
@@ -100,6 +104,10 @@ struct MainView: View {
       }.frame(width:520,height:680)
         .onReceive(NotificationCenter.default.publisher(for:NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
         .onExitCommand { model.stop() }
+        .touchBar {
+            Button("Continuous commands") { model.toggleContinuous() }
+            Button("Stop") { model.stop() }
+        }
     }
 }
 struct VisualPreview: View {
@@ -128,6 +136,10 @@ struct SetupView: View {
             Text("Saves compressed voice snippets, transcripts, screenshots, full model requests and responses, and actions on this Mac. Logs can contain private content. Oldest ZIPs are deleted at 1 GB; each ZIP is at most 25 MB. Upload only files you intend to share.").font(.caption).foregroundStyle(.secondary)
             Button("Open debug log folder") { model.revealDebugLogs() }
             Divider()
+            Picker("Voice mode",selection:$model.voiceMode) {
+                ForEach(AppModel.VoiceMode.allCases,id:\.self) { Text($0.rawValue).tag($0) }
+            }
+            Text("Hold Control–Option–Space: push to talk. Command–Option–Space: continuous commands on/off. Control–Option–Period: Stop. Shortcuts work across apps; Touch Bar buttons appear while this app is active.").font(.caption)
             ChatGPTSetupView(model:model,account:model.chatGPT)
             Divider()
             HStack {

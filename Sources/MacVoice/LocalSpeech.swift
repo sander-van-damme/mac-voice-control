@@ -12,6 +12,14 @@ import VoiceCore
     func prepare(progress: @escaping @Sendable (Double,String) -> Void) async throws
     func start() throws
     func stop()
+    func configurePushToTalk(_ enabled: Bool)
+    func setCapture(_ enabled: Bool)
+    func finishPushToTalk()
+}
+extension SpeechProviding {
+    func configurePushToTalk(_ enabled: Bool) {}
+    func setCapture(_ enabled: Bool) {}
+    func finishPushToTalk() {}
 }
 
 @MainActor final class LocalSpeech: SpeechProviding {
@@ -21,6 +29,16 @@ import VoiceCore
     private var continuation: AsyncStream<AudioChunk>.Continuation?
     private var generation = UUID()
     private var tapInstalled = false
+    private let captureGate = CaptureGate()
+    private var pushMode = false
+    private var sequence = AudioSequence()
+    func configurePushToTalk(_ enabled: Bool) { pushMode = enabled; captureGate.set(!enabled) }
+    func setCapture(_ enabled: Bool) { captureGate.set(enabled) }
+    func finishPushToTalk() {
+        captureGate.close {
+            continuation?.yield(AudioChunk(samples:[],rate:16000,sequence:sequence.next(),receivedAt:MonotonicTime.now,end:true))
+        }
+    }
     private var monitor: SFSpeechRecognitionTask?, monitorRequest: SFSpeechAudioBufferRecognitionRequest?
     private var monitorRenewal: Task<Void,Never>?
     private let monitorFeed = RecognitionFeed()
@@ -64,8 +82,10 @@ import VoiceCore
         guard format.sampleRate > 0, format.channelCount > 0 else { throw VoiceError("No microphone is available.") }
         startStopMonitor()
         let feed = monitorFeed
-        let sequence = AudioSequence()
+        sequence = AudioSequence()
+        let sequence = self.sequence, gate = captureGate, pushMode = self.pushMode
         input.installTap(onBus:0,bufferSize:1024,format:format) { buffer,_ in
+          gate.capture {
             feed.append(buffer)
             guard let channels = buffer.floatChannelData else { return }
             let count = Int(buffer.frameLength), channelCount = Int(buffer.format.channelCount)
@@ -73,12 +93,14 @@ import VoiceCore
             for channel in 0..<channelCount { for i in 0..<count { mono[i] += channels[channel][i]/Float(channelCount) } }
             audioContinuation.yield(AudioChunk(samples:mono,rate:buffer.format.sampleRate,
                 sequence:sequence.next(),receivedAt:MonotonicTime.now))
+          }
         }
         tapInstalled = true
         do { engine.prepare(); try engine.start() }
         catch { stop(); throw VoiceError("The microphone could not start. Check the selected input device.") }
         segmentation = Task.detached(priority:.userInitiated) { [weak self] in
             var segmenter = UtteranceSegmenter()
+            var held = PushToTalkBuffer()
             var continuity = AudioContinuity()
             let converter = AudioConverter()
             defer { utterances.continuation.finish() }
@@ -92,6 +114,14 @@ import VoiceCore
                     await fail("Microphone audio was interrupted. Start again and repeat the full command."); return
                 }
                 do {
+                    if pushMode {
+                        if chunk.end {
+                            utterances.continuation.yield(Utterance(samples:held.finish(),endedAt:chunk.receivedAt))
+                        } else {
+                            try held.append(converter.resample(chunk.samples,from:chunk.rate))
+                        }
+                        continue
+                    }
                     let samples = try converter.resample(chunk.samples,from:chunk.rate)
                     if let complete = segmenter.append(samples) {
                         utterances.continuation.yield(Utterance(samples:complete,endedAt:chunk.receivedAt-segmenter.completedTrailingSilence))
@@ -106,6 +136,9 @@ import VoiceCore
             guard let self else { return }
             for await utterance in utterances.stream {
                 guard !Task.isCancelled, generation == run else { return }
+                if utterance.samples.isEmpty {
+                    onTranscript(SpeechTranscript(text:"",inferenceMilliseconds:0,endToTranscriptMilliseconds:0)); continue
+                }
                 guard SpeechFreshness.accepts(endedAt:utterance.endedAt,now:MonotonicTime.now) else {
                     onError("Speech was delayed. Start again and repeat your command."); return
                 }
@@ -176,6 +209,14 @@ import VoiceCore
 }
 private struct AudioChunk: Sendable {
     let samples: [Float]; let rate: Double; let sequence: UInt64; let receivedAt: TimeInterval
+    var end = false
+}
+private final class CaptureGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled = true
+    func set(_ value: Bool) { lock.lock(); enabled = value; lock.unlock() }
+    func capture(_ body: () -> Void) { lock.lock(); defer { lock.unlock() }; if enabled { body() } }
+    func close(_ body: () -> Void) { lock.lock(); defer { lock.unlock() }; enabled = false; body() }
 }
 private struct Utterance: Sendable { let samples: [Float]; let endedAt: TimeInterval }
 private final class AudioSequence: @unchecked Sendable {
