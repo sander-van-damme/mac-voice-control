@@ -48,9 +48,21 @@ import VoiceCore
         o.timings = ["accessibility_ms":axTime,"capture_ms":(MonotonicTime.now-captureStart)*1000]
         if snapshots.count > 3 { snapshots.removeAll() }
         snapshots[o.id] = ax
+        DebugLog.shared.value("desktop.observation",o,fields:["observation_id":o.id.uuidString])
+        DebugLog.shared.record("desktop.screenshot",data:o.jpeg,ext:"jpg",fields:["observation_id":o.id.uuidString])
         return o
     }
     func isFresh(_ o: Observation, for action: Action) async throws -> Bool {
+        do {
+            let result = try await checkFreshness(o,for:action)
+            DebugLog.shared.event("desktop.freshness",["observation_id":o.id.uuidString,"fresh":String(result)])
+            return result
+        } catch {
+            DebugLog.shared.event("desktop.freshness_error",["observation_id":o.id.uuidString,"error":error.localizedDescription])
+            throw error
+        }
+    }
+    private func checkFreshness(_ o: Observation, for action: Action) async throws -> Bool {
         try Task.checkCancellation()
         guard MonotonicTime.now-o.acquiredAt < 35,
               let ax = snapshots[o.id], basicGuard(o,ax:ax) else { return false }
@@ -64,6 +76,7 @@ import VoiceCore
             }
         }
         let fresh = try await ScreenCapture.capture(window:o.window,redactions:ax.secureRegions)
+        DebugLog.shared.record("desktop.freshness_screenshot",data:fresh.jpeg,ext:"jpg",fields:["observation_id":o.id.uuidString])
         try Task.checkCancellation()
         guard fresh.geometry == o.geometry else { return false }
         if action.operation == .visualClick {
@@ -89,6 +102,9 @@ import VoiceCore
         return WindowCatalog.unchanged(old,windows:WindowCatalog.current())
     }
     func execute(_ action: Action, observed o: Observation) async throws {
+        DebugLog.shared.value("action.started",action,fields:["observation_id":o.id.uuidString])
+        var completed = false
+        defer { DebugLog.shared.event("action.finished",["observation_id":o.id.uuidString,"completed":String(completed)]) }
         try Task.checkCancellation()
         guard let ax = snapshots[o.id], basicGuard(o,ax:ax) else { throw VoiceError("The target window changed. No input was sent.") }
         switch action.operation {
@@ -177,6 +193,7 @@ import VoiceCore
         case .wait: break
         case .done,.clarify,.requestLanguage: throw VoiceError("Non-executable decision.")
         }
+        completed = true
     }
 }
 private extension String.UTF16View {

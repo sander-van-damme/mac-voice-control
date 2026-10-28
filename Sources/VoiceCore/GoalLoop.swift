@@ -6,11 +6,11 @@ import Foundation
     func isFresh(_ observation: Observation, for action: Action) async throws -> Bool
     func execute(_ action: Action, observed: Observation) async throws
 }
-public enum SessionPhase: String, Sendable {
+public enum SessionPhase: String, Codable, Sendable {
     case stopped = "Stopped", listening = "Listening", transcribing = "Transcribing", observing = "Observing"
     case deciding = "Deciding", assisting = "Language assistance", executing = "Executing", paused = "Paused", completed = "Completed", failed = "Needs attention"
 }
-public struct SessionEvent: Sendable {
+public struct SessionEvent: Codable, Sendable {
     public let phase: SessionPhase, message: String
     public var timings: [String: Double] = [:]
     public var tokens: Int = 0
@@ -45,11 +45,13 @@ public struct SessionEvent: Sendable {
         generation = UUID(); finishConfirmation(false)
     }
     public func resolveConfirmation(_ allowed: Bool, id: UUID) {
+        DebugLog.shared.event("confirmation.resolved",["id":id.uuidString,"allowed":String(allowed),"current":String(pendingConfirmationID == id)])
         guard pendingConfirmationID == id else { return }
         // A timer can be delayed by suspension or IPC. It never extends consent.
         finishConfirmation(allowed && clock() < (confirmationDeadline ?? -.infinity))
     }
     private func finishConfirmation(_ allowed: Bool) {
+        if let id = pendingConfirmationID { DebugLog.shared.event("confirmation.finished",["id":id.uuidString,"allowed":String(allowed)]) }
         confirmationTimer?.cancel(); confirmationTimer = nil
         let c = confirmation; confirmation = nil; pendingAction = nil; pendingObservation = nil
         pendingConfirmationID = nil; confirmationDeadline = nil; c?.resume(returning: allowed)
@@ -65,6 +67,7 @@ public struct SessionEvent: Sendable {
         guard lifetime.isFinite, lifetime > 0 else { throw VoiceError("Confirmation expired.") }
         let expiresAt = clock()+lifetime
         let confirmationID = UUID()
+        DebugLog.shared.value("confirmation.requested",action,fields:["id":confirmationID.uuidString,"observation_id":observation.id.uuidString,"expires_at":String(expiresAt)])
         let result = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(returning:false); return }
@@ -89,6 +92,8 @@ public struct SessionEvent: Sendable {
     }
     public func run(goal: String, context: [HistoryEntry] = []) async throws {
         stop(); let run = generation
+        DebugLog.shared.event("goal.started",["run_id":run.uuidString,"goal":goal])
+        defer { DebugLog.shared.value("goal.history",history,fields:["run_id":run.uuidString]) }
         history = Array(context.suffix(3))
         guard timeBudget.isFinite, timeBudget > 0, timeBudget <= 3600, maxSteps > 0,
               confirmationLifetime.isFinite, (0...300).contains(confirmationLifetime) else { throw VoiceError("Invalid execution limits.") }
@@ -157,6 +162,7 @@ public struct SessionEvent: Sendable {
                 case .clarify: throw VoiceError(reply.message.isEmpty ? "Please clarify the requested action." : reply.message)
                 }
             }
+            DebugLog.shared.value("action.proposed",action,fields:["run_id":run.uuidString,"observation_id":o.id.uuidString])
             if action.operation == .done {
                 guard try await desktop.isFresh(o,for:action) else { continue }
                 try check(run, deadline: deadline); onEvent(SessionEvent(.completed,"The goal appears complete.")); return

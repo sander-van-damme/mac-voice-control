@@ -26,6 +26,17 @@ import VoiceCore
     @Published var estimatedCost: Double = 0
     @Published var setupVisible = false
     let chatGPT = ChatGPTAccount()
+    @Published var debugLogging = UserDefaults.standard.bool(forKey:"debugLogging") {
+        didSet {
+            UserDefaults.standard.set(debugLogging,forKey:"debugLogging")
+            DebugLog.shared.setEnabled(debugLogging)
+        }
+    }
+    func revealDebugLogs() {
+        DebugLog.shared.prepareForSharing()
+        if let error = DebugLog.shared.lastError { message = error }
+        if !NSWorkspace.shared.open(DebugLog.shared.directory) { message = "Could not open the debug log folder." }
+    }
     @Published var languageEnabled = UserDefaults.standard.bool(forKey:"languageEnabled") {
         didSet { UserDefaults.standard.set(languageEnabled,forKey:"languageEnabled"); stop() }
     }
@@ -49,6 +60,7 @@ import VoiceCore
     private var epoch = UUID()
     private var overlay: StatusOverlay?
     init(speech provider: SpeechProviding? = nil, hasKey: () throws -> Bool = { try KeyStore.read() != nil }) {
+        DebugLog.shared.setEnabled(UserDefaults.standard.bool(forKey:"debugLogging"))
         self.speech = provider ?? LocalSpeech()
         let speech = self.speech
         do { keySaved = try hasKey() } catch { message = error.localizedDescription }
@@ -71,6 +83,7 @@ import VoiceCore
         }
         speech.onStop = { [weak self] in self?.stop() }
         speech.onError = { [weak self] text in
+            DebugLog.shared.event("speech.pipeline_error",["error":text])
             self?.stop(); self?.phase = .failed; self?.message = text; self?.showFeedback()
         }
         speech.onTranscribing = { [weak self] in
@@ -126,6 +139,7 @@ import VoiceCore
     }
     func cancelDownload() { downloadTask?.cancel() }
     func start() {
+        DebugLog.shared.event("listening.start_requested")
         guard !listening else { return }
         refreshPermissions()
         guard ready else { setupVisible = true; message = "Complete Setup to start listening."; showSetup(); return }
@@ -143,9 +157,10 @@ import VoiceCore
             message = "Say ‘Hey Jev’ followed by a command. Say ‘stop’ to stop."
             hideAndRestoreTarget()
             showStatus()
-        } catch { phase = .failed; message = error.localizedDescription; showStatus() }
+        } catch { phase = .failed; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showStatus() }
     }
     func stop() {
+        DebugLog.shared.event("listening.stopped")
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
         speech.stop(); listening = false; pending = nil; pendingImage = nil; pendingMarker = nil
         pendingConfirmationID = nil; conversation.clear()
@@ -179,6 +194,7 @@ import VoiceCore
     }
     private func receive(_ text: String, ms: Double) {
         guard listening else { return }
+        DebugLog.shared.event("input.received",["text":text,"transcription_ms":String(ms)])
         timings["transcription_ms"] = ms; transcript = text
         let now = MonotonicTime.now
         switch InputRouter.route(text,final:true,confirmationPending:pending != nil,
@@ -208,7 +224,7 @@ import VoiceCore
                 guard epoch == run else { return }
                 phase = .listening; message = "Goal finished. Listening for ‘Hey Jev’…"
             } catch is CancellationError { }
-            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
+            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showFeedback() }
             guard epoch == run else { return }
             conversation.finished(at:MonotonicTime.now); runTask = nil; clearPending()
         }
@@ -229,11 +245,12 @@ import VoiceCore
                 phase = .executing; try await desktop.execute(action,observed:observation)
                 guard epoch == run else { return }; phase = .listening; message = "Dictation inserted. Listening…"
             } catch is CancellationError { }
-            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; showFeedback() }
+            catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showFeedback() }
             guard epoch == run else { return }; runTask = nil
         }
     }
     private func event(_ event: SessionEvent) {
+        DebugLog.shared.value("session.event",event)
         guard listening else { return }
         phase = event.phase; message = event.message; pending = loop?.pendingAction?.label
         pendingConfirmationID = loop?.pendingConfirmationID
@@ -264,7 +281,7 @@ import VoiceCore
         overlay?.show()
     }
     func shutdown() {
-        stop(); cancelDownload(); chatGPT.cancelSignIn()
+        stop(); cancelDownload(); chatGPT.cancelSignIn(); DebugLog.shared.flush()
     }
     private func clearPending() {
         pending = nil; pendingImage = nil; pendingMarker = nil; pendingConfirmationID = nil

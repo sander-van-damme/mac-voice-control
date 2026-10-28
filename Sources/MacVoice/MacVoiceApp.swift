@@ -124,6 +124,10 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             Text("Setup").font(.headline)
+            Toggle("Enable debug logging",isOn:$model.debugLogging)
+            Text("Saves compressed voice snippets, transcripts, screenshots, full model requests and responses, and actions on this Mac. Logs can contain private content. Oldest ZIPs are deleted at 1 GB; each ZIP is at most 25 MB. Upload only files you intend to share.").font(.caption).foregroundStyle(.secondary)
+            Button("Open debug log folder") { model.revealDebugLogs() }
+            Divider()
             ChatGPTSetupView(model:model,account:model.chatGPT)
             Divider()
             HStack {
@@ -137,7 +141,7 @@ struct SetupView: View {
                 if model.keySaved { Button("Remove key",role:.destructive) { model.forgetKey() }.font(.caption) }
             }.font(.caption)
             Toggle("Allow screen context to be sent to TypeSafe",isOn:$model.consent)
-            Text("Only while executing your commands. Visible documents may contain private information. Known password fields are masked; other sensitive content may still appear. No screenshots or audio are saved.").font(.caption).foregroundStyle(.secondary)
+            Text("Only while executing your commands. Visible documents may contain private information. Known password fields are masked; other sensitive content may still appear. Screenshots and audio are saved locally only when debug logging is enabled.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 permission("Microphone",granted:model.microphone,action:model.requestMicrophone)
                 permission("Accessibility",granted:model.accessibility,action:model.requestAccessibility)

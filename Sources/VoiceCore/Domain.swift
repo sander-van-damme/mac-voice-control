@@ -97,7 +97,7 @@ public struct AppCandidate: Codable, Equatable, Sendable {
     }
 }
 
-public struct Observation: Sendable {
+public struct Observation: Codable, Sendable {
     public var id = UUID()
     public var acquiredAt = MonotonicTime.now
     public let pid: Int32, app: String, window: Rect
@@ -126,7 +126,7 @@ public enum Operation: String, Codable, CaseIterable, Sendable {
 public enum Shortcut: String, Codable, CaseIterable, Sendable {
     case newTab, previousTab, nextTab, back, forward, addressBar, enter, escape, closeTab
 }
-public struct Action: Equatable, Sendable {
+public struct Action: Codable, Equatable, Sendable {
     public let operation: Operation
     public var target: String? = nil
     public var text: String? = nil
