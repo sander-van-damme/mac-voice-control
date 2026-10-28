@@ -42,7 +42,7 @@ public enum OpenAIProtocol {
         func nullable(_ type: String) -> [String:Any] { ["type":[type,"null"]] }
         let action: [String:Any] = ["type":"object","additionalProperties":false,
             "required":["operation","target","text","shortcut","scroll","point","endPoint","keys"],
-            "properties":["operation":["type":"string","enum":["click","focus","typeText","shortcut","scroll","openApp","openURL","openDownloads","wait","visualClick","rightClick","doubleClick","drag","movePointer","keyCombo","done"]],
+            "properties":["operation":["type":"string","enum":["click","focus","typeText","shortcut","scroll","scrollHorizontal","openApp","openURL","openDownloads","wait","visualClick","rightClick","doubleClick","drag","movePointer","keyCombo","done"]],
                 "point":coordinateSchema,"endPoint":coordinateSchema,"keys":["type":["array","null"],"items":["type":"string"],"maxItems":5],
                 "target":nullable("string"),"text":nullable("string"),"scroll":["type":["integer","null"],"minimum":-25,"maximum":25],
                 "shortcut":["anyOf":[["type":"null"],["type":"string","enum":Shortcut.allCases.map(\.rawValue)]]]]]

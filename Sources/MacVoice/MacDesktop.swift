@@ -227,9 +227,9 @@ import VoiceCore
                   let up = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:false) else { throw VoiceError("Could not create keyboard input.") }
             try Task.checkCancellation(); down.flags = flags; up.flags = []
             down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
-        case .scroll:
+        case .scroll, .scrollHorizontal:
             guard abs(action.scroll) <= 25,
-                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:1,wheel1:Int32(action.scroll),wheel2:0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
+                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:1,wheel1:action.operation == .scroll ? Int32(action.scroll) : 0,wheel2:action.operation == .scrollHorizontal ? Int32(action.scroll) : 0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
             // Deliver to the observed process, independent of where the user's pointer sits.
             try Task.checkCancellation(); event.postToPid(o.pid)
         case .openApp:

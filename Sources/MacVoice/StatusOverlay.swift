@@ -85,12 +85,25 @@ struct StatusOverlayView: View {
 }
 
 struct ChatGPTSetupView: View {
+    @State private var apiKey = ""
     @ObservedObject var model: AppModel
     @ObservedObject var account: ChatGPTAccount
     var body: some View {
         VStack(alignment:.leading,spacing:10) {
             Text("Language assistance").font(.headline)
+            Picker("Authentication",selection:$model.apiKeyAuth) {
+                Text("ChatGPT OAuth").tag(false)
+                Text("OpenAI API key").tag(true)
+            }.pickerStyle(.segmented)
             Text("Local speech and TypeSafe Jev stay in use. ChatGPT helps interpret difficult requests and prepare text. All computer actions run through this app.").font(.caption).foregroundStyle(.secondary)
+            if model.apiKeyAuth {
+                SecureField(model.openAIKeySaved ? "Replace OpenAI API key" : "OpenAI API key",text:$apiKey)
+                HStack {
+                    Button("Save key") { model.saveOpenAIKey(apiKey); apiKey = "" }.disabled(apiKey.isEmpty)
+                    if model.openAIKeySaved { Button("Remove key") { model.removeOpenAIKey() } }
+                }
+                Text(model.openAIKeySaved ? "API key saved in Keychain. OpenAI API usage is billed separately from ChatGPT." : "Save an OpenAI API key to enable language assistance.").font(.caption)
+            } else {
             Text(account.status).font(.caption)
             HStack {
                 Button(account.connected ? "Reconnect ChatGPT" : "Continue with ChatGPT") { model.stop(); account.signIn() }.disabled(account.busy)
@@ -99,17 +112,20 @@ struct ChatGPTSetupView: View {
                     Button("Disconnect") { model.stop(); model.languageEnabled = false; account.disconnect() }.disabled(account.busy)
                 }
             }
-            if account.connected {
+            }
+            if model.apiKeyAuth ? model.openAIKeySaved : account.connected {
+                if !model.apiKeyAuth {
                 Button("Use another ChatGPT account") { model.stop(); account.signIn(newAccount:true) }.font(.caption).disabled(account.busy)
-                Toggle("Use ChatGPT for language assistance",isOn:$model.languageEnabled)
-                if account.models.isEmpty {
+                }
+                Toggle("Use language assistance",isOn:$model.languageEnabled)
+                if model.apiKeyAuth || account.models.isEmpty {
                     TextField("Model ID",text:$account.model)
                 } else {
                     Picker("Model",selection:$account.model) { ForEach(account.models) { Text($0.name).tag($0.id) } }
                 }
-                Button("Refresh available models") { account.refreshModels() }.font(.caption).disabled(account.busy)
+                if !model.apiKeyAuth { Button("Refresh available models") { account.refreshModels() }.font(.caption).disabled(account.busy) }
                 Toggle("Share screen context with ChatGPT",isOn:$model.languageScreenContext)
-                Text("Language assistance sends your command and recent action outcomes to OpenAI. Screen context additionally includes the screenshot and relevant Accessibility controls; use it for requests about what is on screen. Audio stays local. Usage counts toward your ChatGPT plan.").font(.caption2).foregroundStyle(.secondary)
+                Text("Language assistance sends commands and recent outcomes to OpenAI. Screen context additionally includes screenshots and Accessibility controls. Audio stays local. OAuth uses your ChatGPT plan; API-key requests use OpenAI API billing.").font(.caption2).foregroundStyle(.secondary)
                 Link("Manage ChatGPT plan usage",destination:URL(string:"https://chatgpt.com/#settings/Usage")!).font(.caption)
             }
         }.onChange(of:account.model) { _,_ in model.stop() }

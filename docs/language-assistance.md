@@ -4,6 +4,10 @@ Local Parakeet transcription and TypeSafe Jev remain the primary path. The optio
 
 ## Setup
 
+Authentication can use either **ChatGPT OAuth** or an **OpenAI API key**, selected in Setup. API keys are stored in a separate Keychain entry and can be replaced or removed. API-key requests do not require a ChatGPT connection and are billed to the OpenAI API account, separately from ChatGPT subscriptions. Enter an API-accessible model ID when using a key. Both methods use the same proposal schema, executor, and cancellation checks.
+
+Voice modes are Wake phrase, Continuous commands, and Push to talk. Continuous mode removes the wake phrase requirement; Stop ends the session. Hold Control–Option–Space for a sentence and release to submit. Pauses during a hold do not submit partial instructions. Empty holds do nothing; holds reaching 15 seconds are rejected. Command–Option–Space toggles continuous commands, and Control–Option–Period stops. Global shortcuts use registered macOS hotkeys; a conflict is reported in status. Touch Bar continuous/Stop buttons are available when this app is active, rather than a persistent system Control Strip item.
+
 1. In Setup, Continue with ChatGPT and authorize plan usage. Identity sign-in alone is insufficient.
 2. Refresh available models and choose one. The initial preference is `gpt-6-luna`; the account-specific catalog determines available choices.
 3. Enable language assistance. Separately enable screen context for requests about visible email, documents, or controls. Changing these settings stops the current session.

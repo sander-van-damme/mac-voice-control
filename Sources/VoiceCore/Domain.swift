@@ -127,7 +127,7 @@ public struct Observation: Codable, Sendable {
 }
 
 public enum Operation: String, Codable, CaseIterable, Sendable {
-    case rightClick, doubleClick, drag, movePointer, keyCombo, click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, wait, done, clarify, requestLanguage
+    case rightClick, doubleClick, drag, movePointer, keyCombo, scrollHorizontal, click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, wait, done, clarify, requestLanguage
 }
 public enum Shortcut: String, Codable, CaseIterable, Sendable {
     case newTab, previousTab, nextTab, back, forward, addressBar, enter, escape, closeTab

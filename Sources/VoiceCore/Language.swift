@@ -123,7 +123,7 @@ public struct LanguageAction: Codable, Sendable {
         case .shortcut:
             guard let shortcut else { throw VoiceError("Missing shortcut.") }
             result.shortcut = shortcut; result.label = "Key: \(shortcut.rawValue)"
-        case .scroll:
+        case .scroll, .scrollHorizontal:
             guard let scroll, scroll != 0, abs(scroll) <= 25 else { throw VoiceError("Invalid proposed scroll.") }
             result.scroll = scroll
         case .wait, .openDownloads: break

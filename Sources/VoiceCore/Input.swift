@@ -35,7 +35,7 @@ public enum InputRouter {
         ["stop","stop now","stop nu","cancel","cancel that","annuleer","annuleren","stop jev"].contains(normalized(text))
     }
     public static func route(_ text: String, final: Bool, confirmationPending: Bool = false,
-                             correctionAllowed: Bool = false) -> RoutedInput {
+                             correctionAllowed: Bool = false, wakeRequired: Bool = true) -> RoutedInput {
         // Partials can only remove authority, never authorize an action.
         if isStop(text) { return .stop }
         guard final else { return .ignore }
@@ -49,7 +49,7 @@ public enum InputRouter {
             (lower.hasPrefix("nee,") || lower.hasPrefix("nee ") || lower.hasPrefix("actually ") || lower.hasPrefix("actually,") || lower.hasPrefix("no, ")) {
             return .correction(String(raw.prefix(1000)))
         }
-        guard WakePhrase.command(in: text) != nil, !lower.isEmpty else { return .ignore }
+        guard (!wakeRequired || WakePhrase.command(in: text) != nil), !lower.isEmpty else { return .ignore }
         if isStop(raw) { return .stop }
         for prefix in ["dictate ", "dicteer "] where lower.hasPrefix(prefix) {
             return .dictation(String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines))
