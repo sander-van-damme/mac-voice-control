@@ -75,6 +75,7 @@ public struct JevRequest: Sendable {
         explicitlyNamedApp = named.count == 1 ? named.first : nil
         var options: [String: [String: String]] = [:]
         options["operation"] = [
+            "rightClick":"Right click a visual target", "doubleClick":"Double click a visual target", "drag":"Drag a visual target to destination", "movePointer":"Move the pointer to a visual target", "keyCombo":"Press a keyboard combination; ask language helper to supply keys",
             "click":"Press an observed accessibility control", "visualClick":"Click a visually identified control that AX cannot represent",
             "focus":"Focus an observed text field before typing", "typeText":"Insert an exact user text span into the focused field",
             "shortcut":"Use an offered keyboard shortcut", "scroll":"Scroll current window", "openApp":"Launch or switch to an offered app",
@@ -118,6 +119,7 @@ public struct JevRequest: Sendable {
         questions["sensitive"] = ["type":"noul","instructions":authority + "Could the next useful action send/submit a message or form, delete, share, publish, buy, pay, disclose private information, grant permission, or cause another consequential external change? If uncertain, answer yes."]
         questions["present"] = ["type":"noul","instructions":authority + "If the next action is a visual click, is exactly one target that fulfills that immediate action clearly visible and identifiable in screenshot? Answer no for absent, ambiguous or obscured targets."]
         questions["visual_target"] = ["type":"box","instructions":authority + "In screenshot, locate the one visible control that should be clicked NEXT to advance the user goal, accounting for recent history. Return its tight bounds."]
+        questions["drag_destination"] = ["type":"box","instructions":authority + "Locate the destination for the requested drag, only when operation is drag."]
         let ref = UUID().uuidString
         let encoder = JSONEncoder()
         let controlsJSON = try JSONSerialization.jsonObject(with: encoder.encode(c.controls))
@@ -152,7 +154,7 @@ public struct JevRequest: Sendable {
         switch operation {
         case .requestLanguage: break
         case .done:
-            guard try response.probability("complete") >= 0.95 else { throw VoiceError("The goal is not visibly complete. Please clarify what should happen next.") }
+            guard try response.probability("complete") >= 0.95 else { throw DecisionUncertainty() }
         case .click, .focus, .typeText:
             let target = try selected(operation == .click ? "click_target" : "focus_target")
             guard let control = candidates.controls.first(where: { $0.id == target }), !control.secure else { throw VoiceError("No safe target was identified.") }
@@ -166,13 +168,18 @@ public struct JevRequest: Sendable {
                 try InsertionSafety.validate(candidates.texts[i])
                 result.label = "Type ‘\(candidates.texts[i].prefix(80))’ into \(control.label)"
             }
-        case .visualClick:
+        case .keyCombo: throw DecisionUncertainty()
+        case .rightClick, .doubleClick, .drag, .movePointer, .visualClick:
             guard try response.probability("present") >= 0.95,
                   let answer = response.answers["visual_target"], answer.type == "box", let box = answer.box,
                   let confidence = answer.confidence, confidence.isFinite, (0.85...1).contains(confidence) else {
                 throw VoiceError("The visual target is uncertain. Try naming it more precisely or enlarging the window.")
             }
             result.point = try o.geometry.desktopPoint(for: box)
+            if operation == .drag {
+                guard let destination = response.answers["drag_destination"], let box = destination.box, (destination.confidence ?? 0) >= 0.85 else { throw DecisionUncertainty() }
+                result.endPoint = try o.geometry.desktopPoint(for:box)
+            }
             result.label = "Click the visual target at \(Int(result.point!.x)), \(Int(result.point!.y))"
         case .openApp:
             let id = try selected("app")
@@ -220,12 +227,26 @@ public final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Send
         self.session = session ?? URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
     }
     public func decide(_ request: JevRequest) async throws -> JevResponse {
+        guard var root = try JSONSerialization.jsonObject(with:request.body) as? [String:Any],
+              let questions = root["questions"] as? [String:Any] else { throw VoiceError("Invalid decision request.") }
+        root["questions"] = questions.filter { ["operation","is_command","complete","sensitive"].contains($0.key) }
+        let first = try await send(try JSONSerialization.data(withJSONObject:root),observationID:request.observationID)
+        guard let op = first.answers["operation"]?.choice else { return first }
+        let arguments: [String:[String]] = ["click":["click_target"],"focus":["focus_target"],"typeText":["focus_target","text"],"shortcut":["shortcut"],"scroll":["scroll"],"openApp":["app"],"openURL":["url"],"visualClick":["present","visual_target"],"rightClick":["present","visual_target"],"doubleClick":["present","visual_target"],"movePointer":["present","visual_target"],"drag":["present","visual_target","drag_destination"]]
+        guard let needed = arguments[op] else { return first }
+        root["questions"] = questions.filter { needed.contains($0.key) }
+        var state = root["state"] as? [String:Any] ?? [:]; state["selected_operation"] = op; root["state"] = state
+        let second = try await send(try JSONSerialization.data(withJSONObject:root),observationID:request.observationID)
+        var answers = first.answers; answers.merge(second.answers.filter { needed.contains($0.key) }) { _,new in new }
+        return JevResponse(model:first.model,answers:answers,usage:JevResponse.Usage(input_tokens:(first.usage?.input_tokens ?? 0)+(second.usage?.input_tokens ?? 0),output_tokens:(first.usage?.output_tokens ?? 0)+(second.usage?.output_tokens ?? 0)))
+    }
+    private func send(_ body: Data, observationID: UUID) async throws -> JevResponse {
         let requestID = UUID().uuidString
-        let fields = ["request_id":requestID,"observation_id":request.observationID.uuidString,"model":JevRequest.model]
-        DebugLog.shared.record("typesafe.request",data:request.body,fields:fields)
+        let fields = ["request_id":requestID,"observation_id":observationID.uuidString,"model":JevRequest.model]
+        DebugLog.shared.record("typesafe.request",data:body,fields:fields)
         defer { DebugLog.shared.event("typesafe.finished",fields) }
         var req = URLRequest(url: URL(string: "https://api.typesafe.ai/v1/systemone")!)
-        req.httpMethod = "POST"; req.httpBody = request.body
+        req.httpMethod = "POST"; req.httpBody = body
         req.setValue("Bearer " + key, forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("true", forHTTPHeaderField: "TypeSafe-Danger-Zone-Images")

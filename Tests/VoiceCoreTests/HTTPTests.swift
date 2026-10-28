@@ -39,6 +39,24 @@ private final class MockHTTP: URLProtocol {
         let result = try await client().decide(q)
         XCTAssertEqual(result.model,"jev-1.14.0")
     }
+    func testStagedArgumentsAreConditionedOnChosenOperation() async throws {
+        let q = try request(), fixture = try response(q)
+        var calls = 0
+        MockHTTP.handler = { request in
+            calls += 1
+            let root = try XCTUnwrap(JSONSerialization.jsonObject(with:try XCTUnwrap(request.httpBody)) as? [String:Any])
+            let questions = try XCTUnwrap(root["questions"] as? [String:Any])
+            if calls == 1 { XCTAssertEqual(Set(questions.keys),Set(["operation","is_command","complete","sensitive"])) }
+            else {
+                XCTAssertEqual(Set(questions.keys),Set(["click_target"]))
+                XCTAssertEqual((root["state"] as? [String:Any])?["selected_operation"] as? String,"click")
+            }
+            return (200,try JSONEncoder().encode(fixture),[:])
+        }
+        let result = try await client().decide(q)
+        XCTAssertEqual(calls,2)
+        XCTAssertEqual(try q.action(from:result,observation:observation()).target,"e0")
+    }
     func testUnauthorizedIsNotRetriedAndResponseBodyIsNotExposed() async throws {
         var calls = 0
         MockHTTP.handler = { _ in calls += 1; return (401,Data("PRIVATE ECHO test-only-not-a-real-key".utf8),[:]) }
@@ -60,6 +78,6 @@ private final class MockHTTP: URLProtocol {
             return calls == 1 ? (503,Data(),["Retry-After":"0"]) : (200,fixture,[:])
         }
         _ = try await client().decide(q)
-        XCTAssertEqual(calls,2)
+        XCTAssertEqual(calls,3)
     }
 }

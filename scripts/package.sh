@@ -10,6 +10,8 @@ rm -rf "$app" dist/staging
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" dist/staging
 cp "$binary_dir/MacVoice" "$app/Contents/MacOS/"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+build_commit="$(git rev-parse HEAD)"
+/usr/libexec/PlistBuddy -c "Add :BuildCommit string $build_commit" "$app/Contents/Info.plist"
 cp LICENSE THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 # SwiftPM resource bundles must accompany the executable when dependencies supply them.
 shopt -s nullglob

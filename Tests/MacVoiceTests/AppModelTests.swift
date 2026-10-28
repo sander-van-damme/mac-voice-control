@@ -21,6 +21,22 @@ import VoiceCore
 }
 
 @MainActor final class AppModelTests: XCTestCase {
+    func testOverlayAnchorSurvivesRepeatedContentAndConfirmationChanges() async throws {
+        _ = NSApplication.shared
+        let model = AppModel(speech:FakeSpeech(),hasKey:{ false })
+        let overlay = StatusOverlay(model:model)
+        defer { overlay.hide() }
+        overlay.show(); let initial = overlay.frame.minY
+        for index in 0..<30 {
+            model.transcript = String(repeating:"Changing transcript ",count:index % 8)
+            model.pending = index % 2 == 0 ? "Confirm fixture action" : nil
+            model.pendingImage = index % 3 == 0 ? Data([1]) : nil
+            overlay.show()
+            try await Task.sleep(nanoseconds:5_000_000)
+            XCTAssertEqual(overlay.frame.minY,initial,accuracy:1)
+        }
+    }
+
     func testSleepStopsSessionAndRequiresExplicitRestart() async {
         let speech = FakeSpeech()
         let tested = AppModel(speech:speech,hasKey:{ false })

@@ -15,7 +15,7 @@ public struct LanguageRequest: Sendable {
     public init(goal: String, mode: LanguageMode, observation: Observation, apps: [AppCandidate],
                 history: [HistoryEntry], includeScreen: Bool, preparedTexts: [String] = []) {
         id = UUID(); self.goal = goal; self.mode = mode; self.observation = observation
-        self.apps = Array(Candidates(goal:goal,observation:observation,apps:apps).apps.prefix(40))
+        self.apps = Array(Candidates(goal:goal,observation:observation,apps:apps).apps)
         self.history = Array(history.suffix(6)); self.includeScreen = includeScreen
         self.preparedTexts = Array(preparedTexts.prefix(1))
     }
@@ -76,11 +76,14 @@ public struct LanguageAction: Codable, Sendable {
     public let target: String?
     public let text: String?
     public let shortcut: Shortcut?
+    public let point: Point?
+    public let endPoint: Point?
+    public let keys: [String]?
     public let scroll: Int?
     public init(operation: Operation, target: String? = nil, text: String? = nil,
-                shortcut: Shortcut? = nil, scroll: Int? = nil) {
+                shortcut: Shortcut? = nil, scroll: Int? = nil, point: Point? = nil, endPoint: Point? = nil, keys: [String]? = nil) {
         self.operation = operation; self.target = target; self.text = text
-        self.shortcut = shortcut; self.scroll = scroll
+        self.shortcut = shortcut; self.scroll = scroll; self.point = point; self.endPoint = endPoint; self.keys = keys
     }
     public func resolve(for request: LanguageRequest) throws -> Action {
         let o = request.observation
@@ -124,7 +127,16 @@ public struct LanguageAction: Codable, Sendable {
             guard let scroll, scroll != 0, abs(scroll) <= 25 else { throw VoiceError("Invalid proposed scroll.") }
             result.scroll = scroll
         case .wait, .openDownloads: break
-        case .visualClick, .done, .clarify, .requestLanguage:
+        case .keyCombo:
+            guard let keys, !keys.isEmpty, keys.count <= 5 else { throw VoiceError("Invalid keyboard combination.") }
+            result.keys = keys
+        case .visualClick, .rightClick, .doubleClick, .drag, .movePointer:
+            guard request.includeScreen, let point, o.geometry.desktopCrop.contains(point) else { throw VoiceError("Visual target is outside the observed display.") }
+            result.point = point; result.endPoint = endPoint
+            if operation == .drag { guard let endPoint, o.geometry.desktopCrop.contains(endPoint) else { throw VoiceError("Invalid drag destination.") } }
+        case .done:
+            guard request.includeScreen, !request.history.isEmpty else { throw VoiceError("Completion requires observed action history and screen context.") }
+        case .clarify, .requestLanguage:
             throw VoiceError("That operation must be resolved by Jev or the user.")
         }
         return result

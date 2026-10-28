@@ -80,18 +80,22 @@ final class AccessibilityReader: @unchecked Sendable {
         let secureFocus = focused.map(Self.secure) ?? false
         guard let window = Self.focusedWindow(pid), let frame = Self.frame(window) else {
             guard let fallback = fallback ?? WindowCatalog.foreground(pid:pid,windows:WindowCatalog.current()),
-                  fallback.pid == pid else { throw VoiceError("No visible foreground window. Open an application window and try again.") }
+                  fallback.pid == pid else {
+                let bounds = CGDisplayBounds(CGMainDisplayID())
+                return AXSnapshot(pid:pid,window:nil,frame:Rect(bounds.minX,bounds.minY,bounds.width,bounds.height),controls:[],references:[:],focusedID:nil,secureFocus:secureFocus,secureRegions:[],incomplete:true)
+            }
             let regions = secureFocus ? focused.flatMap(Self.frame).map { [$0] } ?? [] : []
             return AXSnapshot(pid:pid,window:nil,frame:fallback.frame,visualWindow:fallback,
                 controls:[],references:[:],focusedID:nil,secureFocus:secureFocus,secureRegions:regions,incomplete:true)
         }
         var nodes: [(AXUIElement,Int)] = [(window,0)], visited = Set<CFHashCode>()
         var controls: [Control] = [], refs: [String: AXUIElement] = [:], regions: [Rect] = []
-        var focusedID: String?, webArea = false, count = 0
+        var focusedID: String?, webArea = false, count = 0, truncated = false
         let start = MonotonicTime.now
-        while let (node,depth) = nodes.popLast(), count < 450,
+        while let (node,depth) = nodes.popLast(), count < 2000,
               MonotonicTime.now-start < 0.7 {
-            guard depth < 24, visited.insert(CFHash(node)).inserted else { continue }
+            guard depth < 24 else { truncated = true; continue }
+            guard visited.insert(CFHash(node)).inserted else { continue }
             count += 1
             let role = Self.attribute(node,kAXRoleAttribute) as? String ?? ""
             if role == "AXWebArea" { webArea = true }
@@ -100,8 +104,9 @@ final class AccessibilityReader: @unchecked Sendable {
                 continue // Do not inspect secure labels, values, descendants, or descriptions.
             }
             let children = Self.attribute(node,kAXChildrenAttribute) as? [AXUIElement] ?? []
+            if children.count > 200 { truncated = true }
             nodes.append(contentsOf: children.prefix(200).reversed().map { ($0,depth+1) })
-            guard controls.count < 60, let rect = Self.frame(node), intersects(rect,frame) else { continue }
+            guard let rect = Self.frame(node), intersects(rect,frame) else { continue }
             let actions = Self.actions(node)
             let text = ["AXTextField","AXTextArea","AXComboBox","AXSearchField"].contains(role)
             let press = actions.contains(kAXPressAction)
@@ -116,9 +121,10 @@ final class AccessibilityReader: @unchecked Sendable {
         if webArea { lastPoke[pid] = Date() }
         // Always mask the focused secure field even when it fell beyond the walk budget.
         if secureFocus, let focused, let rect = Self.frame(focused) { regions.append(rect) }
+        controls.sort { ($0.canPress || $0.canFocus) && !($1.canPress || $1.canFocus) }
         return AXSnapshot(pid:pid,window:window,frame:frame,controls:controls,references:refs,
             focusedID:focusedID,secureFocus:secureFocus,secureRegions:regions,
-            incomplete:!nodes.isEmpty || (chromium && !webArea))
+            incomplete:truncated || !nodes.isEmpty || (chromium && !webArea))
     }
     private func intersects(_ a: Rect, _ b: Rect) -> Bool {
         a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y

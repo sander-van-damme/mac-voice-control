@@ -38,7 +38,7 @@ enum ScreenCapture {
         guard let display = shareable.displays.max(by: {
             $0.frame.intersection(windowRect).area < $1.frame.intersection(windowRect).area
         }) else { throw VoiceError("No display is available.") }
-        let crop = display.frame.intersection(windowRect)
+        let crop = display.frame
         guard !crop.isNull, crop.width > 1, crop.height > 1 else { throw VoiceError("The window is not visible on a display.") }
         let own = shareable.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display:display,excludingApplications:own,exceptingWindows:[])
