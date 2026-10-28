@@ -42,6 +42,7 @@ enum ScreenCapture {
         guard !crop.isNull, crop.width > 1, crop.height > 1 else { throw VoiceError("The window is not visible on a display.") }
         let own = shareable.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display:display,excludingApplications:own,exceptingWindows:[])
+        filter.includeMenuBar = true
         let config = SCStreamConfiguration()
         // sourceRect is in display-local points; output dimensions are pixels.
         config.sourceRect = CGRect(x:crop.minX-display.frame.minX,y:crop.minY-display.frame.minY,width:crop.width,height:crop.height)

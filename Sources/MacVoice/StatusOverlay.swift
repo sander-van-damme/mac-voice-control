@@ -47,7 +47,7 @@ private final class StatusPanel: NSPanel {
         let y = bounds.map { min(max(origin.y,$0.minY+16),$0.maxY-height-16) } ?? origin.y
         let x = bounds.map { min(max(origin.x,$0.minX+16),$0.maxX-396) } ?? origin.x
         panel.setFrameOrigin(NSPoint(x:x,y:y))
-        DebugLog.shared.event("overlay.layout",["x":String(x),"y":String(y),"height":String(height),"anchor_y":String(origin.y)])
+        DebugLog.shared.event("overlay.layout",["x":String(Double(x)),"y":String(Double(y)),"height":String(Double(height)),"anchor_y":String(Double(origin.y))])
         panel.orderFrontRegardless()
     }
     var frame: NSRect { panel.frame }

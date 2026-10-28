@@ -24,7 +24,9 @@ import VoiceCore
     func performGlobalCommand(_ goal: String) async throws -> Bool {
         let text = goal.trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters))
         guard let match = text.range(of:#"^(?:open|launch|switch to|open de|start)\s+"#,options:[.regularExpression,.caseInsensitive]) else { return false }
-        let name = String(text[match.upperBound...])
+        let remainder = String(text[match.upperBound...])
+        let separator = remainder.range(of:#"\s+(?:and|en|then|daarna)\s+"#,options:[.regularExpression,.caseInsensitive])
+        let name = separator.map { String(remainder[..<$0.lowerBound]) } ?? remainder
         refreshApps()
         let matches = apps.filter { $0.matchesName(name) || ($0.id == "com.google.Chrome" && name.lowercased() == "chrome") || ($0.id == "com.apple.finder" && name.lowercased() == "finder") }
         guard matches.count == 1, let target = matches.first, let url = appURLs[target.id] else { return false }
@@ -33,7 +35,10 @@ import VoiceCore
         app.activate(options:[])
         for _ in 0..<20 {
             try Task.checkCancellation()
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { return true }
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+                DebugLog.shared.event("global.app_opened",["app_id":target.id,"foreground_verified":"true"])
+                return separator == nil
+            }
             try await Task.sleep(nanoseconds:100_000_000)
         }
         throw VoiceError("Application opened but did not become foreground.")
@@ -229,7 +234,7 @@ import VoiceCore
             down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
         case .scroll, .scrollHorizontal:
             guard abs(action.scroll) <= 25,
-                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:1,wheel1:action.operation == .scroll ? Int32(action.scroll) : 0,wheel2:action.operation == .scrollHorizontal ? Int32(action.scroll) : 0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
+                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:action.operation == .scrollHorizontal ? 2 : 1,wheel1:action.operation == .scroll ? Int32(action.scroll) : 0,wheel2:action.operation == .scrollHorizontal ? Int32(action.scroll) : 0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
             // Deliver to the observed process, independent of where the user's pointer sits.
             try Task.checkCancellation(); event.postToPid(o.pid)
         case .openApp:
