@@ -21,6 +21,32 @@ import VoiceCore
 }
 
 @MainActor final class AppModelTests: XCTestCase {
+    func testBasicCommandsResolveWithoutModelDecisions() throws {
+        let desktop = MacDesktop(), frame = Rect(0,0,800,600)
+        let o = Observation(pid:1,app:"Chrome",window:frame,
+            controls:[Control(id:"field",role:"AXTextField",label:"Address bar",frame:Rect(0,0,100,20),canFocus:true)],
+            focusedID:"field",geometry:try .fitted(crop:frame),jpeg:Data(),signature:[])
+        XCTAssertEqual(desktop.directAction("Open a new tab.",observation:o)?.shortcut,.newTab)
+        XCTAssertEqual(desktop.directAction("Scroll down.",observation:o)?.scroll,-5)
+        XCTAssertEqual(desktop.directAction("Type Google.com",observation:o)?.text,"Google.com")
+        XCTAssertNil(desktop.directAction("Type hello and click Send",observation:o))
+    }
+    func testOverlayAnchorSurvivesRepeatedContentAndConfirmationChanges() async throws {
+        _ = NSApplication.shared
+        let model = AppModel(speech:FakeSpeech(),hasKey:{ false })
+        let overlay = StatusOverlay(model:model)
+        defer { overlay.hide() }
+        overlay.show(); let initial = overlay.frame.minY
+        for index in 0..<30 {
+            model.transcript = String(repeating:"Changing transcript ",count:index % 8)
+            model.pending = index % 2 == 0 ? "Confirm fixture action" : nil
+            model.pendingImage = index % 3 == 0 ? Data([1]) : nil
+            overlay.show()
+            try await Task.sleep(nanoseconds:5_000_000)
+            XCTAssertEqual(overlay.frame.minY,initial,accuracy:1)
+        }
+    }
+
     func testSleepStopsSessionAndRequiresExplicitRestart() async {
         let speech = FakeSpeech()
         let tested = AppModel(speech:speech,hasKey:{ false })

@@ -2,9 +2,15 @@ import Foundation
 
 @MainActor public protocol DesktopControlling {
     var apps: [AppCandidate] { get }
+    func performGlobalCommand(_ goal: String) async throws -> Bool
+    func directAction(_ goal: String, observation: Observation) -> Action?
     func observe() async throws -> Observation
     func isFresh(_ observation: Observation, for action: Action) async throws -> Bool
     func execute(_ action: Action, observed: Observation) async throws
+}
+public extension DesktopControlling {
+    func performGlobalCommand(_ goal: String) async throws -> Bool { false }
+    func directAction(_ goal: String, observation: Observation) -> Action? { nil }
 }
 public enum SessionPhase: String, Codable, Sendable {
     case stopped = "Stopped", listening = "Listening", transcribing = "Transcribing", observing = "Observing"
@@ -98,6 +104,9 @@ public struct SessionEvent: Codable, Sendable {
         guard timeBudget.isFinite, timeBudget > 0, timeBudget <= 3600, maxSteps > 0,
               confirmationLifetime.isFinite, (0...300).contains(confirmationLifetime) else { throw VoiceError("Invalid execution limits.") }
         let started = clock(), deadline = started+timeBudget
+        if try await desktop.performGlobalCommand(goal) {
+            try check(run,deadline:deadline); onEvent(SessionEvent(.completed,"Requested application is open.")); return
+        }
         var previous: Observation?, previousAction: Action?, noChanges = 0, waits = 0, stale = 0
         var attempts: [(Observation,String)] = []
         var preparedTexts: [String] = [], languageCalls = 0
@@ -128,14 +137,18 @@ public struct SessionEvent: Codable, Sendable {
                 preparedTexts = [text]; previous = nil; previousAction = nil
                 continue
             }
+            let direct = desktop.directAction(goal,observation:o)
             let request = try JevRequest(goal: goal, observation: o, apps: desktop.apps, history: history,
                 preparedTexts:preparedTexts,languageAvailable:language != nil && languageCalls < 3)
             onEvent(SessionEvent(.deciding,"Choosing the next action…"))
             try check(run, deadline: deadline)
             let t = MonotonicTime.now
-            let response = try await decider.decide(request); try check(run, deadline: deadline)
+            let response: JevResponse
+            if direct != nil { response = JevResponse(model:JevRequest.model,answers:[:],usage:nil) }
+            else { response = try await decider.decide(request) }
+            try check(run, deadline: deadline)
             var action: Action
-            do { action = try request.action(from: response, observation: o) }
+            do { action = try direct ?? request.action(from: response, observation: o) }
             catch is DecisionUncertainty where language != nil && languageCalls < 3 {
                 action = Action(.requestLanguage,label:"Resolve the uncertain next step")
             }
@@ -161,6 +174,11 @@ public struct SessionEvent: Codable, Sendable {
                 case .action: action = try reply.action!.resolve(for:help)
                 case .clarify: throw VoiceError(reply.message.isEmpty ? "Please clarify the requested action." : reply.message)
                 }
+            }
+            if action.shortcut == .enter, let focused = o.focusedID,
+               let field = o.controls.first(where:{$0.id == focused}),
+               ["adres- en zoekbalk","address and search bar","address bar"].contains(field.label.lowercased()) {
+                action.submission = false
             }
             DebugLog.shared.value("action.proposed",action,fields:["run_id":run.uuidString,"observation_id":o.id.uuidString])
             if action.operation == .done {
@@ -196,6 +214,7 @@ public struct SessionEvent: Codable, Sendable {
             executed.timings["action_ms"] = (MonotonicTime.now-actionStart)*1000
             if attempts.isEmpty { executed.timings["command_to_first_action_ms"] = (clock()-started)*1000 }
             onEvent(executed)
+            if direct != nil { onEvent(SessionEvent(.completed,"Requested input sent.")); return }
             attempts.append((o,action.fingerprint)); previous = o; previousAction = action
             try await Task.sleep(nanoseconds: action.operation == .wait ? 750_000_000 : 220_000_000)
         }

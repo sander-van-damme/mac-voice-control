@@ -21,6 +21,52 @@ import VoiceCore
         }
         apps = found.values.sorted { $0.name < $1.name }
     }
+    func performGlobalCommand(_ goal: String) async throws -> Bool {
+        let text = goal.trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters))
+        guard let match = text.range(of:#"^(?:open|launch|switch to|open de|start)\s+"#,options:[.regularExpression,.caseInsensitive]) else { return false }
+        let remainder = String(text[match.upperBound...])
+        let separator = remainder.range(of:#"\s+(?:and|en|then|daarna)\s+"#,options:[.regularExpression,.caseInsensitive])
+        let name = separator.map { String(remainder[..<$0.lowerBound]) } ?? remainder
+        refreshApps()
+        let matches = apps.filter { $0.matchesName(name) || ($0.id == "com.google.Chrome" && name.lowercased() == "chrome") || ($0.id == "com.apple.finder" && name.lowercased() == "finder") }
+        guard matches.count == 1, let target = matches.first, let url = appURLs[target.id] else { return false }
+        try Task.checkCancellation()
+        let app = try await NSWorkspace.shared.openApplication(at:url,configuration:NSWorkspace.OpenConfiguration())
+        app.activate(options:[])
+        for _ in 0..<20 {
+            try Task.checkCancellation()
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+                DebugLog.shared.event("global.app_opened",["app_id":target.id,"foreground_verified":"true"])
+                return separator == nil
+            }
+            try await Task.sleep(nanoseconds:100_000_000)
+        }
+        throw VoiceError("Application opened but did not become foreground.")
+    }
+    func directAction(_ goal: String, observation: Observation) -> Action? {
+        let text = goal.lowercased().trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters))
+        let shortcuts: [String:Shortcut] = ["open a new tab":.newTab,"new tab":.newTab,"open een nieuw tabblad":.newTab,"press enter":.enter,"druk op enter":.enter,"press escape":.escape,"go back":.back]
+        if let shortcut = shortcuts[text] { var a = Action(.shortcut,label:"Key: " + shortcut.rawValue); a.shortcut = shortcut; return a }
+        let scrolls: [String:Int] = ["scroll down":-5,"scroll up":5,"scroll down a little":-5,"scroll up a little":5,"scroll naar beneden":-5,"scroll naar boven":5]
+        if let amount = scrolls[text] { var a = Action(.scroll,label:text); a.scroll = amount; return a }
+        if let prefix = ["type ","typ "].first(where:{goal.lowercased().hasPrefix($0)}),
+           goal.range(of:#"\s+(?:and|en|then|daarna)\s+(?:click|open|press|klik|druk|ga)\b"#,options:[.regularExpression,.caseInsensitive]) == nil,
+           let id = observation.focusedID,
+           observation.controls.contains(where:{$0.id == id && $0.canFocus && !$0.secure}) {
+            var payload = String(goal.dropFirst(prefix.count))
+            if payload.count >= 2, let first = payload.first, let last = payload.last,
+               (first == "\"" && last == "\"") || (first == "'" && last == "'") { payload = String(payload.dropFirst().dropLast()) }
+            if (try? InsertionSafety.validate(payload)) != nil {
+                var a = Action(.typeText,label:"Insert requested text"); a.target = id; a.text = payload; return a
+            }
+        }
+        if text.hasPrefix("minimize ") || text.hasPrefix("minimaliseer ") {
+            let names = apps.filter { $0.mentioned(in:text) }
+            guard names.count == 1, names[0].mentioned(in:observation.app) else { return nil }
+            var a = Action(.keyCombo,label:"Minimize " + observation.app); a.keys = ["command","m"]; return a
+        }
+        return nil
+    }
     func observe() async throws -> Observation {
         try Task.checkCancellation()
         guard AXIsProcessTrusted() else { throw VoiceError("Enable Accessibility for Mac Voice Control in System Settings.") }
@@ -79,7 +125,7 @@ import VoiceCore
         DebugLog.shared.record("desktop.freshness_screenshot",data:fresh.jpeg,ext:"jpg",fields:["observation_id":o.id.uuidString])
         try Task.checkCancellation()
         guard fresh.geometry == o.geometry else { return false }
-        if action.operation == .visualClick {
+        if [.visualClick,.rightClick,.doubleClick,.drag,.movePointer].contains(action.operation) {
             guard let point = action.point,
                   try ScreenCapture.targetUnchanged(previous:o.jpeg,current:fresh.jpeg,geometry:o.geometry,point:point) else { return false }
         }
@@ -98,7 +144,7 @@ import VoiceCore
             guard let current = AccessibilityReader.focusedWindow(ax.pid) else { return false }
             return CFEqual(current,old) && AccessibilityReader.frame(current)?.near(ax.frame) == true
         }
-        guard let old = ax.visualWindow else { return false }
+        guard let old = ax.visualWindow else { return AccessibilityReader.focusedWindow(ax.pid) == nil && WindowCatalog.foreground(pid:ax.pid,windows:WindowCatalog.current()) == nil }
         return WindowCatalog.unchanged(old,windows:WindowCatalog.current())
     }
     func execute(_ action: Action, observed o: Observation) async throws {
@@ -115,32 +161,47 @@ import VoiceCore
             let error = action.operation == .click ? AXUIElementPerformAction(node,kAXPressAction as CFString) :
                 AXUIElementSetAttributeValue(node,kAXFocusedAttribute as CFString,kCFBooleanTrue)
             guard error == .success else { throw VoiceError("The application refused the accessibility action. Try describing a visual target.") }
-        case .visualClick:
+        case .rightClick, .doubleClick, .drag, .movePointer, .visualClick:
             guard let p = action.point, o.geometry.desktopCrop.contains(p) else { throw VoiceError("Invalid visual click.") }
-            if let window = ax.visualWindow {
-                guard WindowCatalog.exposed(window,at:p,windows:WindowCatalog.current()) else { throw VoiceError("Another window is covering the visual target.") }
-            }
             var hit: AXUIElement?
             let hitResult = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(),Float(p.x),Float(p.y),&hit)
             if hitResult == .success, let hit {
+                var hitPID: pid_t = 0; AXUIElementGetPid(hit,&hitPID)
+                guard hitPID != ProcessInfo.processInfo.processIdentifier else { throw VoiceError("Move the status overlay away from the target and try again.") }
                 guard !AccessibilityReader.secure(hit) else { throw VoiceError("The target is a secure control.") }
-                var pid: pid_t = 0; AXUIElementGetPid(hit,&pid)
-                guard pid == o.pid else { throw VoiceError("Another window is covering the visual target.") }
             } else {
-                guard let window = ax.visualWindow,
-                      WindowCatalog.exposed(window,at:p,windows:WindowCatalog.current()) else {
-                    throw VoiceError("The visual target cannot be verified safely.")
-                }
+                guard o.geometry.desktopCrop.contains(p) else { throw VoiceError("Target is outside the observed display.") }
             }
             try Task.checkCancellation()
-            if let hit, hitResult == .success, AccessibilityReader.actions(hit).contains(kAXPressAction),
+            if action.operation == .visualClick, let hit, hitResult == .success, AccessibilityReader.actions(hit).contains(kAXPressAction),
                ["AXButton","AXLink","AXCheckBox","AXRadioButton"].contains(AccessibilityReader.attribute(hit,kAXRoleAttribute) as? String ?? "") {
                 guard AXUIElementPerformAction(hit,kAXPressAction as CFString) == .success else { throw VoiceError("The visual control refused the action.") }
             } else {
                 let point = CGPoint(x:p.x,y:p.y)
-                guard let down = CGEvent(mouseEventSource:nil,mouseType:.leftMouseDown,mouseCursorPosition:point,mouseButton:.left),
-                      let up = CGEvent(mouseEventSource:nil,mouseType:.leftMouseUp,mouseCursorPosition:point,mouseButton:.left) else { throw VoiceError("Could not create mouse input.") }
-                down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
+                let right = action.operation == .rightClick
+                let button: CGMouseButton = right ? .right : .left
+                func post(_ type: CGEventType, _ at: CGPoint, count: Int64 = 1) throws {
+                    guard let event = CGEvent(mouseEventSource:nil,mouseType:type,mouseCursorPosition:at,mouseButton:button) else { throw VoiceError("Could not create mouse input.") }
+                    event.setIntegerValueField(.mouseEventClickState,value:count); event.post(tap:.cghidEventTap)
+                }
+                if action.operation == .movePointer { try post(.mouseMoved,point) }
+                else {
+                    let destination = action.endPoint.map { CGPoint(x:$0.x,y:$0.y) } ?? point
+                    if action.operation == .drag { guard let end = action.endPoint, o.geometry.desktopCrop.contains(end) else { throw VoiceError("Invalid drag destination.") } }
+                    for count in 1...(action.operation == .doubleClick ? 2 : 1) {
+                        try post(right ? .rightMouseDown : .leftMouseDown,point,count:Int64(count))
+                        // Always release posted buttons, including during cancellation.
+                        defer { try? post(right ? .rightMouseUp : .leftMouseUp,destination,count:Int64(count)) }
+                        if action.operation == .drag {
+                            for step in 1...20 {
+                                try Task.checkCancellation()
+                                let f = Double(step)/20
+                                try post(.leftMouseDragged,CGPoint(x:point.x+(destination.x-point.x)*f,y:point.y+(destination.y-point.y)*f))
+                                try await Task.sleep(nanoseconds:10_000_000)
+                            }
+                        }
+                    }
+                }
             }
         case .typeText:
             guard let id = action.target, let node = ax.references[id], let focus = AccessibilityReader.focusedElement(o.pid),
@@ -160,6 +221,19 @@ import VoiceCore
                 down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
                 try await Task.sleep(nanoseconds:10_000_000)
             }
+        case .keyCombo:
+            let keycodes: [String:CGKeyCode] = ["a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"enter":36,"l":37,"j":38,"k":40,"n":45,"m":46,"tab":48,"space":49,"delete":51,"escape":53,"left":123,"right":124,"down":125,"up":126]
+            let modifiers: [String:CGEventFlags] = ["command":.maskCommand,"shift":.maskShift,"option":.maskAlternate,"control":.maskControl]
+            guard let keys = action.keys, keys.count <= 5 else { throw VoiceError("Invalid keys.") }
+            var flags = CGEventFlags(); var code: CGKeyCode?
+            for key in keys.map({$0.lowercased()}) {
+                if let flag = modifiers[key] { flags.formUnion(flag) }
+                else if let value = keycodes[key], code == nil { code = value }
+                else { throw VoiceError("Unsupported key: " + key) }
+            }
+            guard let code, let down = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:true), let up = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:false) else { throw VoiceError("Select one key and optional modifiers.") }
+            try Task.checkCancellation(); down.flags = flags; up.flags = []
+            down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
         case .shortcut:
             guard let key = action.shortcut else { throw VoiceError("No keyboard shortcut selected.") }
             let mappings: [Shortcut:(CGKeyCode,CGEventFlags)] = [
@@ -171,9 +245,9 @@ import VoiceCore
                   let up = CGEvent(keyboardEventSource:nil,virtualKey:code,keyDown:false) else { throw VoiceError("Could not create keyboard input.") }
             try Task.checkCancellation(); down.flags = flags; up.flags = []
             down.post(tap:.cghidEventTap); up.post(tap:.cghidEventTap)
-        case .scroll:
+        case .scroll, .scrollHorizontal:
             guard abs(action.scroll) <= 25,
-                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:1,wheel1:Int32(action.scroll),wheel2:0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
+                  let event = CGEvent(scrollWheelEvent2Source:nil,units:.line,wheelCount:action.operation == .scrollHorizontal ? 2 : 1,wheel1:action.operation == .scroll ? Int32(action.scroll) : 0,wheel2:action.operation == .scrollHorizontal ? Int32(action.scroll) : 0,wheel3:0) else { throw VoiceError("Invalid scroll.") }
             // Deliver to the observed process, independent of where the user's pointer sits.
             try Task.checkCancellation(); event.postToPid(o.pid)
         case .openApp:

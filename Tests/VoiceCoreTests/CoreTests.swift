@@ -106,7 +106,7 @@ final class CoreTests: XCTestCase {
     func testCandidateBudgetAndDeterministicAppOrdering() throws {
         let apps = (0..<100).map { AppCandidate(id:"a\($0)",name:"Application \($0)") } + [AppCandidate(id:"chrome",name:"Chrome")]
         let candidates = Candidates(goal:"Open Chrome",observation:observation(),apps:apps)
-        XCTAssertEqual(candidates.apps.count,40); XCTAssertEqual(candidates.apps.first?.id,"chrome")
+        XCTAssertEqual(candidates.apps.count,101); XCTAssertEqual(candidates.apps.first?.id,"chrome")
         XCTAssertLessThanOrEqual(candidates.texts.count,24)
     }
     func testLiteralDutchEnglishSpansAndURLSafety() {

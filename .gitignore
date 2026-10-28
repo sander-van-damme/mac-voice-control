@@ -10,3 +10,5 @@ work/
 *.mlpackage/
 *.wav
 *.m4a
+
+.build-linux/

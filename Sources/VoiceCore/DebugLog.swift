@@ -34,7 +34,7 @@ public final class DebugLog: @unchecked Sendable {
         }
         if value {
             event("logging.enabled",["format":"1","app_version":Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "development",
-                "os":ProcessInfo.processInfo.operatingSystemVersionString])
+                "build_sha":Bundle.main.object(forInfoDictionaryKey:"BuildCommit") as? String ?? "unpackaged", "os":ProcessInfo.processInfo.operatingSystemVersionString])
         }
     }
     public func event(_ kind: String, _ fields: [String:String] = [:]) {

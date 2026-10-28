@@ -78,7 +78,7 @@ public struct Control: Codable, Equatable, Sendable {
         self.id = id; self.role = role; self.label = secure ? "[secure]" : String(label.prefix(120))
         self.frame = frame; self.enabled = enabled; self.canPress = canPress; self.canFocus = canFocus; self.secure = secure
     }
-    public static func normalized(_ controls: [Control], limit: Int = 60) -> [Control] {
+    public static func normalized(_ controls: [Control], limit: Int = 2048) -> [Control] {
         var seen = Set<String>()
         return Array(controls.filter { !$0.secure && $0.frame.valid && seen.insert($0.id).inserted }.prefix(limit))
     }
@@ -87,11 +87,17 @@ public struct Control: Codable, Equatable, Sendable {
 public struct AppCandidate: Codable, Equatable, Sendable {
     public let id: String, name: String
     public init(id: String, name: String) { self.id = id; self.name = name }
+    public func matchesName(_ input: String) -> Bool {
+        let short = name.replacingOccurrences(of:"Microsoft ",with:"").replacingOccurrences(of:"Google ",with:"")
+        let value = input.trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters)).lowercased()
+        return [name.lowercased(),short.lowercased()].contains { value == $0 || value == $0 + "s" }
+    }
     public func mentioned(in goal: String) -> Bool {
         let aliases = ["com.google.Chrome":"chrome", "com.apple.finder":"finder", "com.apple.Safari":"safari",
                        "org.mozilla.firefox":"firefox", "com.microsoft.edgemac":"edge", "com.brave.Browser":"brave"]
-        return [name, aliases[id]].compactMap { $0 }.contains { value in
-            let pattern = "(?i)(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for:value) + "(?![\\p{L}\\p{N}])"
+        let short = name.replacingOccurrences(of: "Microsoft ", with: "").replacingOccurrences(of: "Google ", with: "")
+        return [name, short, aliases[id]].compactMap { $0 }.contains { value in
+            let pattern = "(?i)(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for:value) + "s?(?![\\p{L}\\p{N}])"
             return goal.range(of:pattern,options:.regularExpression) != nil
         }
     }
@@ -121,7 +127,7 @@ public struct Observation: Codable, Sendable {
 }
 
 public enum Operation: String, Codable, CaseIterable, Sendable {
-    case click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, wait, done, clarify, requestLanguage
+    case rightClick, doubleClick, drag, movePointer, keyCombo, scrollHorizontal, click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, wait, done, clarify, requestLanguage
 }
 public enum Shortcut: String, Codable, CaseIterable, Sendable {
     case newTab, previousTab, nextTab, back, forward, addressBar, enter, escape, closeTab
@@ -133,12 +139,15 @@ public struct Action: Codable, Equatable, Sendable {
     public var shortcut: Shortcut? = nil
     public var scroll: Int = 0
     public var point: Point? = nil
+    public var endPoint: Point? = nil
+    public var keys: [String]? = nil
+    public var submission = true
     public var sensitive = false
     public var label: String
     public init(_ operation: Operation, label: String) { self.operation = operation; self.label = label }
-    public var fingerprint: String { "\(operation.rawValue)|\(target ?? "")|\(text ?? "")|\(shortcut?.rawValue ?? "")|\(scroll)|\(point?.x ?? 0),\(point?.y ?? 0)" }
+    public var fingerprint: String { "\(operation.rawValue)|\(target ?? "")|\(text ?? "")|\(shortcut?.rawValue ?? "")|\(scroll)|\(point?.x ?? 0),\(point?.y ?? 0)|\(endPoint?.x ?? 0),\(endPoint?.y ?? 0)|\(keys ?? [])" }
     public var requiresConfirmation: Bool {
-        sensitive || operation == .visualClick || shortcut == .enter || shortcut == .closeTab ||
+        sensitive || [.visualClick,.rightClick,.doubleClick,.drag,.keyCombo].contains(operation) || (shortcut == .enter && submission) || shortcut == .closeTab ||
         ["send","delete","remove","share","pay","purchase","buy","checkout","submit","publish","upload","grant","allow","invite",
          "verzend","verstuur","versturen","verwijder","deel","delen","betaal","betalen","kopen","koop","publiceer","toestaan","uitnodig","indienen"].contains { label.lowercased().contains($0) }
     }

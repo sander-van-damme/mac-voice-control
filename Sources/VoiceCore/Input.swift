@@ -62,11 +62,11 @@ public struct Candidates: Sendable {
     public let controls: [Control], apps: [AppCandidate], texts: [String], urls: [String]
     public init(goal: String, observation: Observation, apps: [AppCandidate], preparedTexts: [String] = []) {
         controls = observation.controls.filter { $0.enabled && !$0.secure }
-        // Goal matches first, then running/common apps; deterministic tie order.
+        // Goal matches first; retain the full catalog so absence is never inferred from a shortlist.
         self.apps = Array(apps.sorted {
             let a = $0.mentioned(in:goal), b = $1.mentioned(in:goal)
             return a != b ? a : $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }.prefix(40))
+        })
         var found: [String] = []
         let pattern = #"(?:https?://)?(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:/[^\s\"']*)?"#
         if let regex = try? NSRegularExpression(pattern: pattern) {

@@ -10,6 +10,9 @@ private final class StatusPanel: NSPanel {
 @MainActor final class StatusOverlay {
     private let panel: NSPanel
     private weak var model: AppModel?
+    private var anchor: NSPoint?
+    private var placing = false
+    private var moveObserver: NSObjectProtocol?
     init(model: AppModel) {
         self.model = model
         panel = StatusPanel(contentRect:NSRect(x:0,y:0,width:380,height:230),
@@ -19,7 +22,15 @@ private final class StatusPanel: NSPanel {
         panel.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle,.stationary]
         panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true
         // ScreenCapture already excludes this application's windows.
-        panel.contentView = NSHostingView(rootView:StatusOverlayView(model:model))
+        let hosting = NSHostingView(rootView:StatusOverlayView(model:model))
+        hosting.sizingOptions = []
+        panel.contentView = hosting
+        moveObserver = NotificationCenter.default.addObserver(forName:NSWindow.didMoveNotification,object:panel,queue:.main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.placing else { return }
+                self.anchor = self.panel.frame.origin
+            }
+        }
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x:f.maxX-400,y:f.minY+24))
@@ -27,14 +38,21 @@ private final class StatusPanel: NSPanel {
     }
     func show() {
         let height: CGFloat = model?.pending == nil ? 190 : model?.pendingImage == nil ? 260 : 390
-        let origin = panel.frame.origin
+        placing = true
+        defer { placing = false }
+        let origin = anchor ?? panel.frame.origin
+        if anchor == nil { anchor = origin }
         panel.setContentSize(NSSize(width:380,height:height))
         let bounds = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
         let y = bounds.map { min(max(origin.y,$0.minY+16),$0.maxY-height-16) } ?? origin.y
-        panel.setFrameOrigin(NSPoint(x:origin.x,y:y))
+        let x = bounds.map { min(max(origin.x,$0.minX+16),$0.maxX-396) } ?? origin.x
+        panel.setFrameOrigin(NSPoint(x:x,y:y))
+        DebugLog.shared.event("overlay.layout",["x":String(Double(x)),"y":String(Double(y)),"height":String(Double(height)),"anchor_y":String(Double(origin.y))])
         panel.orderFrontRegardless()
     }
+    var frame: NSRect { panel.frame }
     func hide() { panel.orderOut(nil) }
+    deinit { if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) } }
 }
 
 struct StatusOverlayView: View {
