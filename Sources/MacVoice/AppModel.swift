@@ -5,6 +5,51 @@ import Speech
 import VoiceCore
 
 @MainActor final class AppModel: ObservableObject {
+    enum VoiceMode: String, CaseIterable { case wakeWord = "Wake phrase", continuous = "Continuous commands", pushToTalk = "Push to talk" }
+    @Published var voiceMode: VoiceMode = VoiceMode(rawValue:UserDefaults.standard.string(forKey:"voiceMode") ?? "") ?? .wakeWord {
+        didSet { UserDefaults.standard.set(voiceMode.rawValue,forKey:"voiceMode"); stop() }
+    }
+    @Published private(set) var holdingToTalk = false
+    private var pushWaiting = false
+    private var voiceHint: String {
+        switch voiceMode {
+        case .wakeWord: return "Listening for ‘Hey Jev’…"
+        case .continuous: return "Continuous commands enabled. Say ‘stop’ to stop."
+        case .pushToTalk: return "Hold Control–Option–Space to speak, then release to submit."
+        }
+    }
+    private var shortcuts: VoiceShortcuts?
+    @Published var apiKeyAuth = UserDefaults.standard.bool(forKey:"openAIAPIKeyAuth") {
+        didSet { UserDefaults.standard.set(apiKeyAuth,forKey:"openAIAPIKeyAuth"); stop() }
+    }
+    @Published private(set) var openAIKeySaved = (try? OpenAIAPIKeyStore.read()) != nil
+    func saveOpenAIKey(_ value: String) {
+        stop()
+        do { try OpenAIAPIKeyStore.save(value); openAIKeySaved = true; message = "OpenAI API key saved in Keychain." }
+        catch { message = error.localizedDescription }
+    }
+    func removeOpenAIKey() {
+        stop()
+        do { try OpenAIAPIKeyStore.delete(); openAIKeySaved = false } catch { message = error.localizedDescription }
+    }
+    func installShortcuts() { if shortcuts == nil { shortcuts = VoiceShortcuts(model:self) } }
+    func toggleContinuous() {
+        if listening && voiceMode == .continuous { stop() } else { voiceMode = .continuous; start() }
+    }
+    func beginPushToTalk() {
+        guard !holdingToTalk, !pushWaiting else { return }
+        if voiceMode != .pushToTalk { voiceMode = .pushToTalk }
+        if !listening { start() }
+        guard listening else { return }
+        loop?.stop(); runTask?.cancel(); runTask = nil; clearPending(); epoch = UUID()
+        holdingToTalk = true; speech.setCapture(true)
+        message = "Listening while held… Release to submit."; showStatus()
+    }
+    func endPushToTalk() {
+        guard holdingToTalk else { return }
+        holdingToTalk = false; pushWaiting = true; speech.finishPushToTalk()
+        message = "Transcribing your command…"
+    }
     @Published var phase: SessionPhase = .stopped
     @Published var message = "Set up your key, permissions, and local speech model to begin."
     @Published var transcript = ""
@@ -78,6 +123,9 @@ import VoiceCore
         }
         speech.onTranscript = { [weak self] result in
             guard let self, self.listening else { return }
+            if self.voiceMode == .pushToTalk {
+                guard self.pushWaiting else { return }; self.pushWaiting = false
+            }
             self.timings["speech_end_to_transcript_ms"] = result.endToTranscriptMilliseconds
             self.receive(result.text,ms:result.inferenceMilliseconds)
         }
@@ -146,15 +194,19 @@ import VoiceCore
         do {
             guard let key = try KeyStore.read(), !key.isEmpty else { throw VoiceError("Save your TypeSafe key first.") }
             let desktop = MacDesktop(); self.desktop = desktop
-            let helper: (any LanguageHelping)? = languageEnabled && chatGPT.connected
-                ? OpenAILanguageHelper(auth:chatGPT.auth,model:chatGPT.model) : nil
-            if languageEnabled && helper == nil { throw VoiceError("Connect ChatGPT in Setup or turn off language assistance.") }
+            let keyForOpenAI = apiKeyAuth ? try OpenAIAPIKeyStore.read() : nil
+            let helper: (any LanguageHelping)? = languageEnabled && (apiKeyAuth ? keyForOpenAI != nil : chatGPT.connected)
+                ? OpenAILanguageHelper(auth:chatGPT.auth,model:chatGPT.model,apiKey:keyForOpenAI) : nil
+            if languageEnabled && helper == nil { throw VoiceError(apiKeyAuth ? "Save an OpenAI API key in Setup or turn off language assistance." : "Connect ChatGPT in Setup or turn off language assistance.") }
             let loop = GoalLoop(desktop:desktop,decider:JevClient(key:key),language:helper,
                 languageScreenContext:languageScreenContext); self.loop = loop
             loop.onEvent = { [weak self] event in self?.event(event) }
+            speech.configurePushToTalk(voiceMode == .pushToTalk)
             try speech.start(); listening = true; phase = .listening
             setupVisible = false
             message = "Say ‘Hey Jev’ followed by a command. Say ‘stop’ to stop."
+            if voiceMode == .continuous { message = "Continuous commands enabled. No wake phrase needed. Say ‘stop’ to stop." }
+            if voiceMode == .pushToTalk { message = "Hold Control–Option–Space to speak, then release to submit." }
             hideAndRestoreTarget()
             showStatus()
         } catch { phase = .failed; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showStatus() }
@@ -162,6 +214,7 @@ import VoiceCore
     func stop() {
         DebugLog.shared.event("listening.stopped")
         epoch = UUID(); loop?.stop(); runTask?.cancel(); runTask = nil
+        holdingToTalk = false; pushWaiting = false
         speech.stop(); listening = false; pending = nil; pendingImage = nil; pendingMarker = nil
         pendingConfirmationID = nil; conversation.clear()
         transcript = ""; loop = nil; desktop = nil; commandReceivedAt = nil
@@ -198,12 +251,13 @@ import VoiceCore
         timings["transcription_ms"] = ms; transcript = text
         let now = MonotonicTime.now
         switch InputRouter.route(text,final:true,confirmationPending:pending != nil,
-                                 correctionAllowed:conversation.acceptsCorrection(at:now,active:runTask != nil)) {
+                                 correctionAllowed:conversation.acceptsCorrection(at:now,active:runTask != nil),
+                                 wakeRequired:voiceMode == .wakeWord) {
         case .stop: stop()
         case .confirm: confirm(true)
         case .cancel: confirm(false)
         case .ignore:
-            if runTask == nil { phase = .listening }
+            if runTask == nil { phase = .listening; message = voiceHint }
         case let .command(goal): conversation.begin(goal,at:now); begin(goal)
         case let .correction(correction):
             guard let goal = conversation.correct(correction,at:now,active:runTask != nil) else { message = "Say ‘Hey Jev’ and the full command."; return }
@@ -222,7 +276,7 @@ import VoiceCore
                 try await Task.sleep(nanoseconds:180_000_000)
                 try await loop.run(goal:goal,context:context)
                 guard epoch == run else { return }
-                phase = .listening; message = "Goal finished. Listening for ‘Hey Jev’…"
+                phase = .listening; message = "Goal finished. " + voiceHint
             } catch is CancellationError { }
             catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showFeedback() }
             guard epoch == run else { return }

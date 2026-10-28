@@ -4,19 +4,23 @@ import VoiceCore
 struct OpenAILanguageHelper: LanguageHelping {
     let auth: ChatGPTAuth
     let model: String
+    var apiKey: String? = nil
+    var injectedSession: URLSession? = nil
     func assist(_ request: LanguageRequest) async throws -> LanguageReply {
         let body = try OpenAIProtocol.body(for:request,model:model)
-        let fields = ["request_id":request.id.uuidString,"observation_id":request.observation.id.uuidString,"model":model]
+        let fields = ["request_id":request.id.uuidString,"observation_id":request.observation.id.uuidString,"model":model,"authentication":apiKey == nil ? "chatgpt_oauth" : "api_key"]
         DebugLog.shared.record("chatgpt.request",data:body,fields:fields)
         var rawStream = Data()
         defer {
             DebugLog.shared.record("chatgpt.response_stream",data:rawStream,ext:"txt",fields:fields)
             DebugLog.shared.event("chatgpt.finished",fields)
         }
-        let token = try await auth.token(); try Task.checkCancellation()
+        let token: String
+        if let apiKey { token = apiKey } else { token = try await auth.token() }
+        try Task.checkCancellation()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 45
-        let session = URLSession(configuration:config,delegate:OpenAINoRedirect(),delegateQueue:nil)
+        let session = injectedSession ?? URLSession(configuration:config,delegate:OpenAINoRedirect(),delegateQueue:nil)
         defer { session.invalidateAndCancel() }
         return try await withTaskCancellationHandler {
             var http = URLRequest(url:URL(string:OpenAIProtocol.resource+"/responses")!)
@@ -35,7 +39,7 @@ struct OpenAILanguageHelper: LanguageHelping {
                         rawStream.append(byte)
                     }
                 }
-                throw VoiceError("ChatGPT request failed. Check sign-in, model access, and plan usage in Setup.")
+                throw VoiceError("OpenAI request failed. Check the selected authentication method, model access, and billing or plan limits in Setup.")
             }
             var stream = OpenAIEventStream(), count = 0
             for try await line in bytes.lines {
