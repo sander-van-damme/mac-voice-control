@@ -1,5 +1,30 @@
 # Validation record
 
+## 30 October 2026 — semantic agent development slice
+
+Base revision: `b30994a`. Local branch: `codex/semantic-agent`. These results do not supersede the pending native acceptance gates with earlier CI evidence.
+
+| Check | Executed environment / result |
+|---|---|
+| Unchanged baseline | Swift 6.2, Linux x86_64: 83 portable XCTest cases passed |
+| Final portable suite | 108 XCTest cases passed, zero final failures; no API keys/model weights |
+| Dependency resolution | `swift package resolve` passed on Linux; original macOS lockfile preserved afterward |
+| Portable release build | `swift build -c release` passed: VoiceCore, MacVoiceBrowserHost and VoiceBenchmarks; MacVoice is excluded by Package.swift on Linux |
+| Native source syntax | `swiftc -frontend -parse Sources/MacVoice/*.swift` passed; this is not AppKit type checking or compilation |
+| Browser suite | 20 checks passed in Chromium 154.0.8037.57; production DOM code in a real isolated world; injected Chrome API transport |
+| Production GoalLoop + Chromium | Five complete navigate/search/newest/open workflows verified with mocked Jev decisions; six dispatched actions and ten mock decision requests per run; zero screenshots and no language calls |
+| Native host process | Five framed-stdio/permission/connection checks plus wrong-origin rejection passed on Linux; debug test mailbox |
+| Supporting checks | JavaScript, bash, Python, JSON and workflow YAML syntax; git diff whitespace checks passed |
+| Mac packaging | Attempted script stops at its Darwin/arm64 platform guard; no app, DMG, signature or notarization result for this revision |
+| Live API / real Mac / microphone | Not run. Complete extension installation and Chrome-to-app Native Messaging on macOS not run |
+| New CI job | Added, not remotely executed in this session |
+
+Fixture-only median time to first action: 22.536 ms; median completion: 483.242 ms across five runs. These include mocked Jev and injected Chrome API transport, not network model latency, native AX, real speech, or production browser IPC. No p95 is reported for this sample size.
+
+Ten mock-native runs for each of five direct commands used zero model requests and zero screenshots. This establishes the routing budget, not macOS launch/dispatch latency. A synthetic 300,000-byte image payload produced a 408,570-byte visual request versus a 5,997-byte semantic request. The payload is not a captured/decoded JPEG; this measures serialization size only. No real before/after Mac latency or failure-rate comparison is available.
+
+See `Benchmarks/scenarios.json` for all twenty requested scenarios and their explicit automated/manual/incomplete status. Structural replanning, OCR, general field-value generation, text replacement, learned workflows and spoken feedback are not delivered here. See [architecture](architecture.md) and [browser setup](browser-integration.md) for working capabilities and limits.
+
 ## 27 October 2026 — independent follow-up
 
 The application foundation from PR #1 was reviewed independently and extended in [PR #2](https://github.com/sander-van-damme/mac-voice-control/pull/2). Review sources and the before-implementation decisions are in [research-follow-up.md](research-follow-up.md).

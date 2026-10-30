@@ -1,0 +1,128 @@
+{
+  "environment": "Linux fixture; mocked models/native dispatch/Chrome API transport; real Chromium DOM",
+  "scenarios": {
+    "Open Chrome": {
+      "runs": 10,
+      "verified": 10,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 0.064
+        },
+        "task_completion_ms": {
+          "median": 0.077
+        }
+      },
+      "jev_requests": [
+        0
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    },
+    "Open Finder": {
+      "runs": 10,
+      "verified": 10,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 0.051
+        },
+        "task_completion_ms": {
+          "median": 0.062
+        }
+      },
+      "jev_requests": [
+        0
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    },
+    "Open Downloads": {
+      "runs": 10,
+      "verified": 10,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 0.04
+        },
+        "task_completion_ms": {
+          "median": 0.051
+        }
+      },
+      "jev_requests": [
+        0
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    },
+    "Create a new tab": {
+      "runs": 10,
+      "verified": 10,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 0.048
+        },
+        "task_completion_ms": {
+          "median": 0.059
+        }
+      },
+      "jev_requests": [
+        0
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    },
+    "Go to example.org": {
+      "runs": 10,
+      "verified": 10,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 0.067
+        },
+        "task_completion_ms": {
+          "median": 0.082
+        }
+      },
+      "jev_requests": [
+        0
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    },
+    "real_chromium_mock_jev": {
+      "runs": 5,
+      "verified": 5,
+      "timings": {
+        "command_to_first_action_ms": {
+          "median": 22.536
+        },
+        "task_completion_ms": {
+          "median": 483.242
+        }
+      },
+      "jev_requests": [
+        10
+      ],
+      "screenshots_sent": [
+        0
+      ]
+    }
+  },
+  "browser_checks": [
+    {
+      "passed": 20,
+      "browser": "154.0.8037.57",
+      "liveAPI": false,
+      "nativeMac": false,
+      "chromeAPITransport": "injected",
+      "dom": "real Chromium isolated world"
+    }
+  ],
+  "synthetic_request_size": {
+    "visual_bytes": 408570,
+    "structured_bytes": 5997,
+    "synthetic_jpeg_bytes": 300000
+  }
+}

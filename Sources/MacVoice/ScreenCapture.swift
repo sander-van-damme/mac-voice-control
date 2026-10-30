@@ -6,6 +6,7 @@ import VoiceCore
 
 struct CapturedScreen {
     let jpeg: Data, signature: [UInt8], geometry: ImageGeometry
+    var timings: [String:Double] = [:]
 }
 enum ScreenCapture {
     /// A global thumbnail can hide a changed icon. Compare actual color pixels around a visual click too.
@@ -31,6 +32,7 @@ enum ScreenCapture {
         return zip(before,after).allSatisfy { abs(Int($0)-Int($1)) <= 24 }
     }
     static func capture(window: Rect, redactions: [Rect]) async throws -> CapturedScreen {
+        let captureStart = MonotonicTime.now
         guard CGPreflightScreenCaptureAccess() else { throw VoiceError("Enable Screen Recording in System Settings, then quit and reopen Mac Voice Control.") }
         let shareable = try await SCShareableContent.excludingDesktopWindows(true,onScreenWindowsOnly:true)
         try Task.checkCancellation()
@@ -50,7 +52,10 @@ enum ScreenCapture {
         config.showsCursor = false; config.capturesAudio = false
         let image = try await SCScreenshotManager.captureImage(contentFilter:filter,configuration:config)
         try Task.checkCancellation()
-        return try process(image,geometry:g,redactions:redactions)
+        let captureMilliseconds = (MonotonicTime.now-captureStart)*1000
+        var result = try process(image,geometry:g,redactions:redactions)
+        result.timings["screenshot_capture_ms"] = captureMilliseconds
+        return result
     }
     static func process(_ image: CGImage, geometry g: ImageGeometry, redactions: [Rect]) throws -> CapturedScreen {
         guard let ctx = CGContext(data:nil,width:g.pixelWidth,height:g.pixelHeight,bitsPerComponent:8,bytesPerRow:0,
@@ -67,10 +72,12 @@ enum ScreenCapture {
             ctx.fill(CGRect(x:x-4,y:Double(g.pixelHeight)-top-h-4,width:w+8,height:h+8))
         }
         guard let output = ctx.makeImage() else { throw VoiceError("Could not redact the screenshot.") }
+        let encodingStart = MonotonicTime.now
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data,UTType.jpeg.identifier as CFString,1,nil) else { throw VoiceError("Could not encode the screenshot.") }
         CGImageDestinationAddImage(dest,output,[kCGImageDestinationLossyCompressionQuality:0.78] as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw VoiceError("Screenshot encoding failed.") }
+        let encodingMilliseconds = (MonotonicTime.now-encodingStart)*1000
         var signature = [UInt8](repeating:0,count:64*64)
         signature.withUnsafeMutableBytes { raw in
             if let tiny = CGContext(data:raw.baseAddress,width:64,height:64,bitsPerComponent:8,bytesPerRow:64,
@@ -78,7 +85,7 @@ enum ScreenCapture {
                 tiny.interpolationQuality = .low; tiny.draw(output,in:CGRect(x:0,y:0,width:64,height:64))
             }
         }
-        return CapturedScreen(jpeg:data as Data,signature:signature,geometry:g)
+        return CapturedScreen(jpeg:data as Data,signature:signature,geometry:g,timings:["screenshot_encoding_ms":encodingMilliseconds])
     }
 }
 private extension CGRect { var area: CGFloat { isNull ? 0 : width*height } }
