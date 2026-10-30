@@ -60,7 +60,8 @@ public enum InputRouter {
 
 public struct Candidates: Sendable {
     public let controls: [Control], apps: [AppCandidate], texts: [String], urls: [String]
-    public init(goal: String, observation: Observation, apps: [AppCandidate], preparedTexts: [String] = []) {
+    public let textPayloads: [TextPayload]
+    public init(goal: String, observation: Observation, apps: [AppCandidate], preparedTexts: [String] = [], searchQueries: [String] = [], compact: Bool = false) {
         controls = observation.controls.filter { $0.enabled && !$0.secure }
         // Goal matches first, then running/common apps; deterministic tie order.
         self.apps = Array(apps.sorted {
@@ -68,7 +69,7 @@ public struct Candidates: Sendable {
             return a != b ? a : $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }.prefix(40))
         var found: [String] = []
-        let pattern = #"(?:https?://)?(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:/[^\s\"']*)?"#
+        let pattern = #"https?://[^\s\"']+|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:/[^\s\"']*)?"#
         if let regex = try? NSRegularExpression(pattern: pattern) {
             for m in regex.matches(in: goal, range: NSRange(goal.startIndex..., in: goal)) {
                 if let range = Range(m.range, in: goal) {
@@ -82,7 +83,11 @@ public struct Candidates: Sendable {
         let literalURLs = urls.flatMap { url in
             [url,url.replacingOccurrences(of:#"^https?://"#,with:"",options:.regularExpression)]
         }.filter { goal.contains($0) }
-        texts = Array(Self.unique(preparedTexts + literalURLs + Self.spans(goal)).prefix(24))
+        texts = Array(Self.unique(preparedTexts + searchQueries + literalURLs + Array(Self.spans(goal).prefix(compact ? 4 : 24))).prefix(24))
+        textPayloads = texts.map { value in
+            TextPayload(value:value,intent:preparedTexts.contains(value) ? .generatedWriting : searchQueries.contains(value) ? .searchQuery : .literal,
+                provenance:preparedTexts.contains(value) ? "validated_language_reply" : searchQueries.contains(value) ? "deterministic_goal_extraction" : "user_transcript")
+        }
     }
     public static func safeURL(_ value: String) -> Bool {
         guard let u = URLComponents(string: value), ["https","http"].contains(u.scheme?.lowercased() ?? ""),

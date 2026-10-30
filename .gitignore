@@ -10,3 +10,4 @@ work/
 *.mlpackage/
 *.wav
 *.m4a
+node_modules/

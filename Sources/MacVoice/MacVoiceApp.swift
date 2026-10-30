@@ -132,6 +132,9 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:14) {
             Text("Setup").font(.headline)
+            Toggle("Use Chrome semantic browser control",isOn:$model.browserEnabled)
+            Button("Set up Chrome extension") { model.installBrowserBridge() }
+            Text("One-time setup: load the supplied extension in Chrome → Extensions → Developer mode → Load unpacked. In its popup, allow the sites you want controlled. No debugging port is opened. Turn this off to use Accessibility and vision.").font(.caption).foregroundStyle(.secondary)
             Toggle("Enable debug logging",isOn:$model.debugLogging)
             Text("Saves compressed voice snippets, transcripts, screenshots, full model requests and responses, and actions on this Mac. Logs can contain private content. Oldest ZIPs are deleted at 1 GB; each ZIP is at most 25 MB. Upload only files you intend to share.").font(.caption).foregroundStyle(.secondary)
             Button("Open debug log folder") { model.revealDebugLogs() }

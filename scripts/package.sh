@@ -4,17 +4,24 @@ cd "$(dirname "$0")/.."
 test "$(uname -s)" = Darwin
 test "$(uname -m)" = arm64
 swift build -c release --product MacVoice
+swift build -c release --product MacVoiceBrowserHost
 binary_dir="$(swift build -c release --show-bin-path)"
 app="dist/Mac Voice Control.app"
 rm -rf "$app" dist/staging
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" dist/staging
-cp "$binary_dir/MacVoice" "$app/Contents/MacOS/"
+cp "$binary_dir/MacVoice" "$binary_dir/MacVoiceBrowserHost" "$app/Contents/MacOS/"
+cp -R BrowserExtension "$app/Contents/Resources/"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp LICENSE THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
 # SwiftPM resource bundles must accompany the executable when dependencies supply them.
 shopt -s nullglob
 for bundle in "$binary_dir"/*.bundle; do cp -R "$bundle" "$app/Contents/Resources/"; done
 identity="${SIGNING_IDENTITY:--}"
+if [[ "$identity" == '-' ]]; then
+  codesign --force --sign - "$app/Contents/MacOS/MacVoiceBrowserHost"
+else
+  codesign --force --options runtime --timestamp --sign "$identity" "$app/Contents/MacOS/MacVoiceBrowserHost"
+fi
 if [[ "$identity" == '-' ]]; then
   codesign --force --sign - --entitlements Resources/MacVoice.entitlements "$app"
   distribution=development-unsigned

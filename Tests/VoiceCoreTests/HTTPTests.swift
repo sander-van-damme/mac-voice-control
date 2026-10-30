@@ -39,6 +39,16 @@ private final class MockHTTP: URLProtocol {
         let result = try await client().decide(q)
         XCTAssertEqual(result.model,"jev-1.14.0")
     }
+    func testStructuredRequestsDoNotEnableImageAPI() async throws {
+        var o = observation(); o.source = .accessibility
+        let q = try JevRequest(goal:"click Next",observation:o,apps:[],history:[])
+        let fixture = try JSONEncoder().encode(response(q))
+        MockHTTP.handler = { request in
+            XCTAssertNil(request.value(forHTTPHeaderField:"TypeSafe-Danger-Zone-Images"))
+            return (200,fixture,[:])
+        }
+        _ = try await client().decide(q)
+    }
     func testUnauthorizedIsNotRetriedAndResponseBodyIsNotExposed() async throws {
         var calls = 0
         MockHTTP.handler = { _ in calls += 1; return (401,Data("PRIVATE ECHO test-only-not-a-real-key".utf8),[:]) }

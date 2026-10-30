@@ -1,0 +1,6 @@
+{
+  "name": "mac-voice-control-browser-tests",
+  "private": true,
+  "scripts": {"test:browser": "node Tests/Browser/integration.cjs"},
+  "devDependencies": {"playwright": "1.62.1"}
+}

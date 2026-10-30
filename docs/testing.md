@@ -2,6 +2,32 @@
 
 Development began on Linux on 26 October 2026. Native tests/builds run on GitHub-hosted Apple Silicon macOS runners. This document distinguishes executable checks from pending desktop acceptance.
 
+## Semantic agent checks (30 October 2026)
+
+The unchanged baseline had 83 passing portable XCTest cases. The current record is in [validation.md](validation.md). Use the semantic-agent run linked in validation.md for current native compilation/tests and packaging evidence; historical CI links alone do not validate these changes.
+
+```bash
+swift package resolve
+swift test --parallel
+swift build -c release
+swift build --product VoiceBenchmarks
+swift build --product MacVoiceBrowserHost
+swift run VoiceBenchmarks > work/benchmark-results.jsonl
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run test:browser
+python3 Tests/Browser/native-host.py
+python3 scripts/benchmark-report.py work/benchmark-results.jsonl work/browser-tests.log
+```
+
+Create `work/` before redirecting logs. Set `CHROMIUM_PATH` if Chromium is installed outside Playwright's cache. The native-host test requires a debug build because its test-directory argument is deliberately absent from release builds. Run `BROWSER_RUNS=20 npm run test:browser` for a larger fixture sample; samples below 20 report a median without p95.
+
+The browser suite executes production DOM code in a real Chromium isolated world and forwards a real Swift GoalLoop through injected Chrome API transport. Jev choices are deterministic mocks. It covers navigation, query insertion, delayed results, dated selection/opening, dropdowns, node replacement, obscuration, disabled/hidden controls, field-value changes, wrong-tab/expired/cancelled/unsupported actions, sensitive-data exclusions and a sensitive-action counter. It does not install the extension or exercise optional permission approval. The native host is tested separately as a real Swift child process with framed stdio, private permissions, connection binding, wrong-origin rejection and oversized-message rejection.
+
+`Benchmarks/scenarios.json` inventories all twenty requested scenarios. Five direct scenarios are repeated mock-native measurements; the browser workflow is real DOM execution with mocked model/Chrome transport. Native Finder, actual ASR, real vision, complex field replacement and live corrections still need manual validation. No API key is needed for automated tests.
+
+Mac acceptance must additionally cover packaged-host code signing, Chrome registration and revocation, multiple profiles/windows, AX typing values/ranges and tab freshness, generation invalidation during direct observation, selected-text refusal, browser unload/uncertain acknowledgement, TCC denial/recovery and spoken Stop at every suspension point. Existing microphone and display checklists below still apply.
+
 ## Automated checks
 
 `swift test --parallel` runs the real VoiceCore module against synthetic Jev fixtures and a stateful fake desktop. No paid key, microphone, user screen, or model download is needed. Tests cover image request construction, explicit asset references/header model contract, response parsing, probability/choice validation, target presence, geometry and padding, negative display origins, Retina independence, candidate limits, secure normalization, bilingual routing, literal dictation, correction context, confirmation expiry, stale targets, cancellation after an in-flight decision, repeats, bounded waiting, independent completion evidence, and multi-step state transitions.

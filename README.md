@@ -1,6 +1,6 @@
 # Mac Voice Control
 
-A native macOS assistant for Dutch, English, and mixed spoken computer commands. Local Parakeet Ultra transcribes your voice; TypeSafe Jev 1.14 chooses the next supported action using a current screenshot and supplementary Accessibility information. Optional ChatGPT language assistance prepares text and proposes difficult next steps. Every computer action is executed and checked by this application.
+A native macOS assistant for Dutch, English, and mixed spoken computer commands. Local Parakeet Ultra transcribes your voice. Known commands execute locally; compound goals receive bounded objectives. TypeSafe Jev 1.14 chooses grounded actions from Chrome/Accessibility semantics, with screenshots when needed. Optional ChatGPT language assistance prepares text and proposes difficult next steps. Every computer action is executed and checked by this application.
 
 **Experimental development software.** Jev's image/Box API is experimental. Compilation and automated policy tests do not establish reliable desktop control or mixed-language recognition. See [validation status](docs/testing.md) before using it with important work.
 
@@ -31,6 +31,12 @@ No speech models are included in the repository or DMG. Do not mistake a source 
 
 After the first successful model load in this version, subsequent launches automatically prepare the cached model. This does not start microphone listening. On first use or after an unsuccessful preparation, use **Download / load** to retry; cached files are reused.
 
+### Optional Chrome semantic control
+
+Setup → **Set up Chrome extension** registers the bundled Native Messaging host and opens the extension folder. Load it in `chrome://extensions` using Developer mode → Load unpacked. Grant access per site in the extension popup, then enable **Use Chrome semantic browser control** in app Setup. No debugging port or terminal commands are needed. Managed Chrome can prohibit development extensions. See [setup, permissions and limits](docs/browser-integration.md).
+
+This development slice includes a real DOM adapter and a verified synthetic newsletter workflow through the Swift goal loop. Native Mac compilation, tests and development DMG packaging passed CI; normal Chrome installation and live Jev/voice acceptance remain unperformed; see [validation](docs/validation.md).
+
 ### Optional ChatGPT language assistance
 
 Setup offers **ChatGPT OAuth** or **OpenAI API key** authentication. To use an API key, select that option, save the key in Keychain, enter an API-accessible model ID, and enable language assistance. No OAuth connection is needed for API-key mode. API usage is billed separately from a ChatGPT subscription.
@@ -58,13 +64,21 @@ Say **stop**, **stop nu**, **cancel**, or **annuleer** to stop, or use **Stop** 
 
 During a task or within 15 seconds afterward, correct it with **“Nee, de andere”**, **“Actually, go back”**, or **“No, I meant Chrome”**. After that window, give the full command with **Hey Jev**. This cancels the previous run and observes the current screen again. It does not automatically undo arbitrary changes.
 
-For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command, and bypasses the language helper. Typing inserts at the cursor; it does not silently clear existing contents. With ChatGPT assistance enabled, requests such as **“Hey Jev, write a short greeting in Dutch in this field”** prepare text for Jev to insert. Each insertion is limited to 2,000 UTF-16 units. Newlines, tabs, and control characters are refused; request Enter separately and confirm it.
+For literal insertion, focus a text field and say **“Hey Jev, dicteer …”** or **“Hey Jev, dictate …”**. The remainder is treated as text, never as another computer command, and bypasses the language helper. Typing inserts at a verified cursor; it refuses selected-text replacement or unsupported insertion ranges. With ChatGPT assistance enabled, requests such as **“Hey Jev, write a short greeting in Dutch in this field”** prepare text for Jev to insert. Each insertion is limited to 2,000 UTF-16 units. Newlines, tabs, and control characters are refused; request Enter separately and confirm it.
 
-Sensitive actions pause and show the proposed action. Say **confirm / bevestig** or use the Confirm button. **Cancel / annuleer**, another command, a changed target, Stop, or 25 seconds of inactivity invalidates confirmation. Visual clicks, Enter/submission, and closing tabs always require confirmation. The app stops when uncertainty, repeated actions, or execution limits prevent safe progress.
+Sensitive actions pause and show the proposed action. Say **confirm / bevestig** or use the Confirm button. **Cancel / annuleer**, another command, a changed target, Stop, or 25 seconds of inactivity invalidates confirmation. Visual clicks, Enter/submission, closing tabs, unknown semantic buttons and dropdown selections require confirmation. Recognized navigation links and search buttons may proceed after deterministic checks; model sensitivity can still require confirmation. The app stops when uncertainty, repeated actions, or execution limits prevent safe progress.
+
+## Semantic agent development slice
+
+`CommandRouter` handles unambiguous local actions without Jev, screenshots or OpenAI. `TaskPlanner` preserves the full goal and tracks bounded objectives. The loop prefers opt-in Chrome DOM observations, then native Accessibility, and requests vision when semantics cannot locate the target. Completion combines an independent Jev completion answer, freshness and objective-specific evidence. Dispatch alone is reported as unverified.
+
+The deterministic planner handles a limited clause grammar. There is no autonomous structural replanner, OCR, learned workflow store or general form-value model yet. Newest-result selection requires a unique latest visible ISO date across matching visible links with verifiable destinations; pagination, missing dates, query-based identities and ambiguity stop safely. Simple app → URL batches are bounded and cancellable. Speech segmentation remains unchanged pending hardware measurements.
+
+Run `swift test --parallel`, `swift run VoiceBenchmarks`, and the [browser/native-host checks](docs/testing.md). Measurements distinguish fixture overhead from live model/Mac latency. The twenty-scenario coverage inventory is in `Benchmarks/scenarios.json`; it explicitly marks manual and incomplete scenarios.
 
 ## Privacy and limitations
 
-- Voice audio is processed locally. Transcripts, screenshots, and bounded AX context go to TypeSafe during ordinary decisions. Optional language assistance sends commands and recent action outcomes to OpenAI; screenshots and AX controls require its separate screen-context setting. Explicit dictation inserts locally.
+- Voice audio is processed locally. Direct commands make no model call. Agent decisions send bounded Chrome/AX context to TypeSafe; visual decisions additionally send a screenshot. Optional language assistance sends commands and recent action outcomes to OpenAI; screenshots and AX controls require its separate screen-context setting. Explicit dictation inserts locally.
 - Debug logging is off by default. When enabled in Setup, compressed voice snippets, transcripts, screenshots, full model requests/responses, and action records are saved locally. **These ZIPs contain private content.** Nothing uploads automatically. Keychain stores credentials; authentication headers and sign-in responses are excluded from debug logs. See [debug logging](docs/debug-logging.md) for storage, upload, and retention details.
 - Known secure AX fields are masked, secure focus blocks control, unknown text focus blocks typing, and secure values are never read as labels. **This does not guarantee that screenshots contain no private material.** Canvas text, ordinary fields, inaccessible controls, and a truncated AX tree can hide secrets from redaction. Keep sensitive windows out of view.
 - The app controls the foreground window on the display with the largest overlap. A window spanning displays is cropped to one display; offscreen controls require scrolling or moving the window. Moving/resizing/switching windows during a decision causes re-observation or a safe stop.
