@@ -55,7 +55,7 @@ const {spawn} = require('node:child_process'), readline = require('node:readline
     function action(operation,target,extra={}) {return {operation,target,label:operation,scroll:0,sensitive:false,...extra};}
     let snapshot=await observe(), serialized=JSON.stringify(snapshot);
     for(const secret of ['PRIVATE_DRAFT','PRIVATE_PASSWORD','PRIVATE_CARD']) assert(!serialized.includes(secret));passed++;
-    assert(!snapshot.controls.some(c=>c.label==='Hidden control'));assert(snapshot.controls.some(c=>c.label==='Disabled control'&&!c.enabled));passed++;
+    assert(!snapshot.controls.some(c=>c.label==='Hidden control'));assert(!snapshot.controls.some(c=>c.label==='Invisible ancestor control'));assert(snapshot.controls.some(c=>c.label==='Disabled control'&&!c.enabled));passed++;
     const search=snapshot.controls.find(c=>c.label==='Search website');assert(search);assert(snapshot.context.hasUnsupportedContent);passed++;
     assert.equal((await call('act',snapshot.context,action('focus',search.id))).ok,true);
     snapshot=await observe();assert.equal((await call('act',snapshot.context,action('typeText',search.id,{text:'newsletters'}))).ok,true);passed++;

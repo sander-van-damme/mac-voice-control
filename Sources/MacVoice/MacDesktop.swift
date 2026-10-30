@@ -119,7 +119,7 @@ import VoiceCore
             guard let element = ax.references[id], let old = o.controls.first(where:{$0.id == id}),
                   !AccessibilityReader.secure(element), AccessibilityReader.attribute(element,kAXEnabledAttribute) as? Bool != false,
                   AccessibilityReader.frame(element)?.near(old.frame) == true,
-                  AccessibilityReader.label(element) == old.label else { return false }
+                  AccessibilityReader.label(element) == old.label, AccessibilityReader.attribute(element,kAXRoleAttribute) as? String == old.role else { return false }
             if let selected = old.selected, AccessibilityReader.attribute(element,kAXSelectedAttribute) as? Bool != selected { return false }
             if let checked = old.checked, (AccessibilityReader.attribute(element,kAXValueAttribute) as? NSNumber).map({ $0.intValue != 0 }) != checked { return false }
             if action.operation == .typeText {
@@ -175,7 +175,7 @@ import VoiceCore
         case .click,.focus:
             guard let id = action.target, let node = ax.references[id], !AccessibilityReader.secure(node),
                   let old = o.controls.first(where:{$0.id == id}), AccessibilityReader.frame(node)?.near(old.frame) == true,
-                  AccessibilityReader.label(node) == old.label, AccessibilityReader.attribute(node,kAXEnabledAttribute) as? Bool != false else { throw VoiceError("The control is no longer available.") }
+                  AccessibilityReader.label(node) == old.label, AccessibilityReader.attribute(node,kAXRoleAttribute) as? String == old.role, AccessibilityReader.attribute(node,kAXEnabledAttribute) as? Bool != false else { throw VoiceError("The control is no longer available.") }
             try Task.checkCancellation()
             let error = action.operation == .click ? AXUIElementPerformAction(node,kAXPressAction as CFString) :
                 AXUIElementSetAttributeValue(node,kAXFocusedAttribute as CFString,kCFBooleanTrue)

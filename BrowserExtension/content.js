@@ -17,6 +17,7 @@
     /(?:password|one-time-code|cc-|transaction-|username)/i.test(e.autocomplete || '') ||
     /\b(password|wachtwoord|credit.?card|card.?number|api.?key|secret|token|security.?code|cvv)\b/i.test([e.name,e.id,e.getAttribute('aria-label'),e.placeholder].join(' '));
   const visible = e => {
+    if (typeof e.checkVisibility === 'function' && !e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return false;
     const r = e.getBoundingClientRect(), s = getComputedStyle(e);
     return !e.closest('[hidden],[inert],[aria-hidden=true]') && s.visibility === 'visible' && s.display !== 'none' && Number(s.opacity) > 0 &&
       r.width > 1 && r.height > 1 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
@@ -47,7 +48,7 @@
     const date = /^\d{4}-\d{2}-\d{2}$/.test(visibleDate || '') && !isNaN(Date.parse(visibleDate)) ? visibleDate : undefined;
     return {role:role(e), label:label(e), frame:{x:r.x,y:r.y,width:r.width,height:r.height},
       enabled:!e.matches(':disabled,[aria-disabled=true]') && !e.closest('[aria-disabled=true],[inert]'),
-      canPress:!editable && e.tagName !== 'SELECT',canFocus:editable && !e.readOnly,secure:false,
+      canPress:!editable && e.tagName !== 'SELECT',canFocus:editable && !e.readOnly && e.getAttribute('aria-readonly') !== 'true',secure:false,
       checked:e.matches('input[type=checkbox],input[type=radio]') ? e.checked : undefined,
       selected:e.hasAttribute('aria-selected') ? e.getAttribute('aria-selected') === 'true' : undefined,
       destination:e.tagName === 'A' ? destination(e) : undefined,context:context || undefined,date,
