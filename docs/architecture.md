@@ -64,4 +64,4 @@ Metrics contain no transcripts, labels, URLs or images. Debug logging stays off 
 
 ## Remaining product work
 
-Real Apple Silicon compilation, TCC/Native Messaging installation, spoken Stop races, microphone code-switching, live Jev decisions and real desktop acceptance remain required. There is no OCR backend, learned workflow store, autonomous replanning, comprehensive text replacement, or spoken feedback implementation in this slice. Existing local speech, language authentication, confirmation UI, overlay, visual geometry and credential storage remain in place.
+Apple Silicon CI compiled the app, passed 129 tests and packaged the development DMG at source 0d44e70. Real TCC/Native Messaging installation, spoken Stop races, microphone code-switching, live Jev decisions and desktop acceptance remain required. There is no OCR backend, learned workflow store, autonomous replanning, comprehensive text replacement, or spoken feedback implementation in this slice. Existing local speech, language authentication, confirmation UI, overlay, visual geometry and credential storage remain in place.

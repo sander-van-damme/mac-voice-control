@@ -10,19 +10,22 @@ Base revision: `b30994a`. Local branch: `codex/semantic-agent`. These results do
 | Final portable suite | 110 XCTest cases passed, zero final failures; no API keys/model weights |
 | Dependency resolution | `swift package resolve` passed on Linux; original macOS lockfile preserved afterward |
 | Portable release build | `swift build -c release` passed: VoiceCore, MacVoiceBrowserHost and VoiceBenchmarks; MacVoice is excluded by Package.swift on Linux |
-| Native CI at initial commit | Apple Silicon macOS run [41073320444](https://github.com/sander-van-damme/mac-voice-control/actions/runs/41073320444), source 9bd1841: 127 tests passed; app compiled, signed development DMG packaged and uploaded. The direct-authority/runner follow-up requires its own CI |
+| Native CI at initial commit | Apple Silicon macOS run [41073320444](https://github.com/sander-van-damme/mac-voice-control/actions/runs/41073320444), source 9bd1841: 127 tests passed; app compiled, signed development DMG packaged and uploaded. The direct-authority/runner/visibility follow-up passed its own CI below |
+| Final remote CI | Source 0d44e70, [run 41074646897](https://github.com/sander-van-damme/mac-voice-control/actions/runs/41074646897): Ubuntu 24.04 passed 110 tests, 20 Chromium 151 DOM/GoalLoop checks and native-host tests; Apple Silicon macOS passed 129 tests, compiled the app and packaged/uploaded the development DMG |
 | Native source syntax | `swiftc -frontend -parse Sources/MacVoice/*.swift` passed; this is not AppKit type checking or compilation |
 | Browser suite | 20 checks passed in Chromium 154.0.8037.57; production DOM code in a real isolated world; injected Chrome API transport |
 | Production GoalLoop + Chromium | Five complete navigate/search/newest/open workflows verified with mocked Jev decisions; six dispatched actions and ten mock decision requests per run; zero screenshots and no language calls |
 | Native host process | Five framed-stdio/permission/connection checks plus wrong-origin rejection passed on Linux; debug test mailbox |
 | Supporting checks | JavaScript, bash, Python, JSON and workflow YAML syntax; git diff whitespace checks passed |
-| Mac packaging | Local Linux attempt stops at the Darwin/arm64 guard. Initial remote macOS CI packaged and verified an ad-hoc development app/DMG; notarization not attempted |
+| Mac packaging | Local Linux attempt stops at the Darwin/arm64 guard. Final remote macOS CI packaged and verified an ad-hoc development app/DMG; notarization not attempted |
 | Live API / real Mac / microphone | Not run. Complete extension installation and Chrome-to-app Native Messaging on macOS not run |
-| CI follow-up | Draft PR #7 run 41073320444 exposed an unsupported Ubuntu 26.04 Swift setup; the portable job is now pinned to Ubuntu 24.04. macOS passed 127 tests and packaged a development DMG at 9bd1841; final follow-up CI pending |
+| CI follow-up | Draft PR #7 run 41073320444 exposed an unsupported Ubuntu 26.04 Swift setup; the portable job is now pinned to Ubuntu 24.04. macOS passed 127 tests and packaged a development DMG at 9bd1841; final follow-up passed in run 41074646897 |
 
 Fixture-only median time to first action: 21.421 ms; median completion: 482.358 ms across five runs. These include mocked Jev and injected Chrome API transport, not network model latency, native AX, real speech, or production browser IPC. No p95 is reported for this sample size.
 
 Ten mock-native runs for each of five direct commands used zero model requests and zero screenshots. This establishes the routing budget, not macOS launch/dispatch latency. A synthetic 300,000-byte image payload produced a 408,570-byte visual request versus a 5,997-byte semantic request. The payload is not a captured/decoded JPEG; this measures serialization size only. No real before/after Mac latency or failure-rate comparison is available.
+
+Download the final [development artifact](https://github.com/sander-van-damme/mac-voice-control/actions/runs/41074646897/artifacts/12986154216) (GitHub sign-in required, expires 13 November 2026). It contains the DMG, checksum and lockfile for source 0d44e70. Documentation-only follow-ups do not change that packaged code.
 
 See `Benchmarks/scenarios.json` for all twenty requested scenarios and their explicit automated/manual/incomplete status. Structural replanning, OCR, general field-value generation, text replacement, learned workflows and spoken feedback are not delivered here. See [architecture](architecture.md) and [browser setup](browser-integration.md) for working capabilities and limits.
 

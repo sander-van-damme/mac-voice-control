@@ -41,7 +41,7 @@ Unchanged baseline: 83 portable tests passed. Current local suite: 110 passed, z
 
 Chromium 154: 20 checks passed, including five complete workflows through the production Swift GoalLoop. DOM execution is real in an isolated world; Jev choices and Chrome API transport are injected. The native Swift host separately passed framed-stdio, permission, connection-binding, oversized-frame and wrong-origin checks. These are not complete installed-extension or Mac desktop tests.
 
-GitHub Apple Silicon macOS CI compiled the initial implementation, passed 127 tests and packaged/uploaded a signed development DMG at 9bd1841 (run 41073320444). The final direct-authority/runner follow-up requires its own CI. The first portable CI attempt failed because ubuntu-latest selected unsupported Ubuntu 26.04; the job is pinned to Ubuntu 24.04. See [validation record](validation.md) for the latest authoritative results.
+Final GitHub CI at source 0d44e70 passed all jobs in run 41074646897: Ubuntu 24.04 passed 110 core tests, 20 real-DOM checks (Chromium 151, injected Chrome API transport/mock Jev) and the native-host tests; Apple Silicon macOS compiled the app, passed 129 tests and packaged/uploaded the signed development DMG. [Download the artifact](https://github.com/sander-van-damme/mac-voice-control/actions/runs/41074646897/artifacts/12986154216). Documentation-only follow-ups preserve that tested application code. The first portable CI attempt failed because ubuntu-latest selected unsupported Ubuntu 26.04; pinning the job to Ubuntu 24.04 fixed the failure. See [validation record](validation.md) for the latest authoritative results.
 
 Real microphone/code-switching, live Jev/OpenAI decisions, TCC, normal-profile extension installation/permissions, Chrome-to-app Native Messaging, multiple displays/profiles/windows and actual hands-free tasks remain unperformed. macOS CI does not replace them.
 
@@ -59,7 +59,7 @@ There is no new OCR backend, learned workflow store, comprehensive replacement/g
 
 ## G. Next priorities
 
-1. Complete Apple Silicon packaging and the real TCC/Chrome installation, permission, profile/window and spoken-Stop checklist.
+1. Complete real TCC/Chrome installation, permission, profile/window and spoken-Stop acceptance with the packaged Apple Silicon build.
 2. Collect live Jev/ASR task trajectories and measured median/p95 latency, task success, false actions and intervention rates.
 3. Add typed uncertain-outcome recovery and bounded objective replanning without non-idempotent replay.
 4. Extend evidence/identity for query-based links, pagination, native folders, supported field replacement and rich editors.

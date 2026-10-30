@@ -4,7 +4,7 @@ Development began on Linux on 26 October 2026. Native tests/builds run on GitHub
 
 ## Semantic agent checks (30 October 2026)
 
-The unchanged baseline had 83 passing portable XCTest cases. The current record is in [validation.md](validation.md). Native builds and prior CI links in this repository do not validate these new macOS changes.
+The unchanged baseline had 83 passing portable XCTest cases. The current record is in [validation.md](validation.md). Use the semantic-agent run linked in validation.md for current native compilation/tests and packaging evidence; historical CI links alone do not validate these changes.
 
 ```bash
 swift package resolve

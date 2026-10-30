@@ -35,7 +35,7 @@ After the first successful model load in this version, subsequent launches autom
 
 Setup → **Set up Chrome extension** registers the bundled Native Messaging host and opens the extension folder. Load it in `chrome://extensions` using Developer mode → Load unpacked. Grant access per site in the extension popup, then enable **Use Chrome semantic browser control** in app Setup. No debugging port or terminal commands are needed. Managed Chrome can prohibit development extensions. See [setup, permissions and limits](docs/browser-integration.md).
 
-This development slice includes a real DOM adapter and a verified synthetic newsletter workflow through the Swift goal loop. Native Mac compilation, Chrome installation and live Jev/voice acceptance for these changes remain unperformed; see [validation](docs/validation.md).
+This development slice includes a real DOM adapter and a verified synthetic newsletter workflow through the Swift goal loop. Native Mac compilation, tests and development DMG packaging passed CI; normal Chrome installation and live Jev/voice acceptance remain unperformed; see [validation](docs/validation.md).
 
 ### Optional ChatGPT language assistance
 
