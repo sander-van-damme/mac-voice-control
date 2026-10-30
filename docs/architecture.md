@@ -12,7 +12,7 @@ Local microphone endpointing → Parakeet Ultra final transcript → `InputRoute
 
 Literal dictation remains literal, including words like “delete”. Quoted typing strips only a recognized field suffix; named or uncertain destinations go through grounded target selection. Direct closing of tabs still uses the loop's confirmation identity, expiry and freshness gates, without a Jev call.
 
-`DirectCommandExecuting` returns `DirectResult`. Foreground app activation and supported query-free browser URL identity can be verified. Dispatch of a native shortcut, scrolling, Downloads or text insertion is reported as **sent, outcome unverified**, rather than a completed task. This is intentionally weaker evidence than verified goal completion.
+`DirectCommandExecuting` returns `DirectResult` and accepts an authorization check that the native driver repeats after asynchronous preparation and immediately before dispatch, preserving cancellation and whole-task deadlines. Foreground app activation and supported query-free browser URL identity can be verified. Dispatch of a native shortcut, scrolling, Downloads or text insertion is reported as **sent, outcome unverified**, rather than a completed task. This is intentionally weaker evidence than verified goal completion.
 
 ## Plans and text
 

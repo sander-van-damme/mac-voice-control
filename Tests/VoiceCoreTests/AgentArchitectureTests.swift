@@ -107,7 +107,11 @@ final class SemanticDecisionTests: XCTestCase {
     func observe() async throws -> Observation { observation() }
     func isFresh(_ observation: Observation,for action: Action) async throws -> Bool { true }
     func execute(_ action: Action,observed: Observation) async throws { actions.append(action) }
-    func executeDirect(_ action: Action) async throws -> DirectResult { hook?(); try Task.checkCancellation(); actions.append(action); return DirectResult(verified:verified) }
+    func executeDirect(_ action: Action) async throws -> DirectResult { actions.append(action); return DirectResult(verified:verified) }
+    func executeDirect(_ action: Action, validate: @MainActor () throws -> Void) async throws -> DirectResult {
+        await Task.yield(); hook?(); try validate()
+        return try await executeDirect(action)
+    }
 }
 @MainActor final class FastLoopTests: XCTestCase {
     func testDirectBypassesAllDecisionCallsAndScreenshots() async throws {
@@ -130,6 +134,20 @@ final class SemanticDecisionTests: XCTestCase {
         actual.onEvent = { if $0.phase == .executing { actual.stop() } }
         do { try await actual.run(goal:"open Chrome"); XCTFail() } catch is CancellationError { }
         XCTAssertTrue(world.actions.isEmpty)
+    }
+    func testDirectPreparationCannotCrossTheWholeTaskDeadline() async throws {
+        let world = DirectWorld(); var now = 0.0
+        let loop = GoalLoop(desktop:world,decider:ScriptedDecider(["clarify"]),clock:{ now })
+        loop.timeBudget = 1; world.hook = { now = 2 }
+        do { try await loop.run(goal:"open Chrome"); XCTFail() } catch { }
+        XCTAssertTrue(world.actions.isEmpty)
+    }
+    func testStopDuringDirectPreparationPreventsDispatch() async throws {
+        let world = DirectWorld()
+        let actual = GoalLoop(desktop:world,decider:ScriptedDecider(["clarify"]))
+        world.hook = { actual.stop() }
+        do { try await actual.run(goal:"open Chrome"); XCTFail() } catch is CancellationError { }
+        XCTAssertTrue(world.actions.isEmpty); XCTAssertEqual(actual.metrics.outcome,"cancelled")
     }
     func testDispatchIsNotFalselyReportedAsVerifiedCompletion() async throws {
         let world = DirectWorld(); world.verified = false

@@ -12,7 +12,7 @@ This is an opt-in development extension, not a published Chrome Web Store packag
 
 The stable development extension ID is `jmfolbhhccnileefopndlkjokamifggp`. The manifest's public key preserves this ID across local installations. No signing private key is distributed. Managed Chrome policies can prohibit unpacked extensions; in that case use Accessibility/vision. Store publication and managed deployment are future work. Updates to the app can require reloading the extension. Moving the app requires registering the native host again.
 
-Revoke individual sites in Chrome's extension details → Site access. Turn the app toggle off to stop using the browser backend. Remove the extension to disconnect the native host. To fully uninstall the registration, remove `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.macvoicecontrol.browser.json` in Finder. The private IPC directory is `~/Library/Application Support/MacVoiceControl/BrowserBridge`.
+Revoke individual sites in Chrome's extension details → Site access. This controls DOM access; native Accessibility/vision fallback still follows the app's separate screen consent and macOS permissions. Stop the app to end all control. Turn the app toggle off to stop using the browser backend. Remove the extension to disconnect the native host. To fully uninstall the registration, remove `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.macvoicecontrol.browser.json` in Finder. The private IPC directory is `~/Library/Application Support/MacVoiceControl/BrowserBridge`.
 
 ## Why Native Messaging
 

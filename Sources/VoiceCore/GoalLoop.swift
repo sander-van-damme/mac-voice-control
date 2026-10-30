@@ -148,7 +148,7 @@ public struct SessionEvent: Codable, Sendable {
                         executionStart = MonotonicTime.now
                         try await desktop.execute(action,observed:observation)
                         result = DirectResult(verified:false,dispatchedAt:executionStart)
-                    } else { result = try await direct.executeDirect(action) }
+                    } else { result = try await direct.executeDirect(action,validate: { try self.check(run,deadline:deadline) }) }
                     try check(run,deadline:deadline)
                     if firstAction { metrics.timings["command_to_first_action_ms"] = max(0,((result.dispatchedAt ?? actionStart)-started)*1000) }
                     metrics.add("action_ms",milliseconds:(MonotonicTime.now-executionStart)*1000); metrics.count("actions")

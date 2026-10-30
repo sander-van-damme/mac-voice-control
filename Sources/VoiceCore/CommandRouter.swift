@@ -85,4 +85,12 @@ public struct DirectResult: Sendable {
 }
 @MainActor public protocol DirectCommandExecuting {
     func executeDirect(_ action: Action) async throws -> DirectResult
+    func executeDirect(_ action: Action, validate: @MainActor () throws -> Void) async throws -> DirectResult
+}
+public extension DirectCommandExecuting {
+    func executeDirect(_ action: Action, validate: @MainActor () throws -> Void) async throws -> DirectResult {
+        try validate()
+        let result = try await executeDirect(action)
+        try validate(); return result
+    }
 }

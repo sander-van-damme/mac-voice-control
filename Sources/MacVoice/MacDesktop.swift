@@ -275,6 +275,10 @@ import VoiceCore
         } while true
     }
     func executeDirect(_ original: Action) async throws -> DirectResult {
+        try await executeDirect(original,validate: { try Task.checkCancellation() })
+    }
+    func executeDirect(_ original: Action, validate: @MainActor () throws -> Void) async throws -> DirectResult {
+        try validate()
         var action = original
         let executionRun = executionGeneration
         try Task.checkCancellation()
@@ -291,6 +295,7 @@ import VoiceCore
             return DirectResult(verified:false,dispatchedAt:dispatchedAt)
         }
         let o = try await observe(preference:.semantic)
+        try validate()
         guard executionGeneration == executionRun else { throw CancellationError() }
         if action.operation == .shortcut {
             guard ["chrome","safari","firefox","edge","brave"].contains(where: { o.app.lowercased().contains($0) }) else {
@@ -306,6 +311,7 @@ import VoiceCore
         }
         guard try await isFresh(o,for:action) else { throw VoiceError("The target changed. Repeat the command.") }
         try Task.checkCancellation()
+        try validate()
         guard executionGeneration == executionRun else { throw CancellationError() }
         let dispatchedAt = MonotonicTime.now
         try await execute(action,observed:o)
