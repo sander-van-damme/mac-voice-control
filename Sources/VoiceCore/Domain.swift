@@ -73,9 +73,18 @@ public struct Control: Codable, Equatable, Sendable {
     public let id: String, role: String, label: String
     public let frame: Rect
     public let enabled: Bool, canPress: Bool, canFocus: Bool, secure: Bool
+    public let selected: Bool?, checked: Bool?
+    public let destination: String?, context: String?, date: String?
+    public let options: [String]?
     public init(id: String, role: String, label: String, frame: Rect, enabled: Bool = true,
-                canPress: Bool = false, canFocus: Bool = false, secure: Bool = false) {
+                canPress: Bool = false, canFocus: Bool = false, secure: Bool = false,
+                selected: Bool? = nil, checked: Bool? = nil, destination: String? = nil,
+                context: String? = nil, date: String? = nil, options: [String]? = nil) {
         self.id = id; self.role = role; self.label = secure ? "[secure]" : String(label.prefix(120))
+        self.selected = selected; self.checked = checked
+        self.destination = secure ? nil : destination.map(BrowserContext.canonicalURL)
+        self.context = secure ? nil : context.map { String($0.prefix(240)) }; self.date = secure ? nil : date
+        self.options = secure ? nil : options.map { Array($0.prefix(30)).map { String($0.prefix(120)) } }
         self.frame = frame; self.enabled = enabled; self.canPress = canPress; self.canFocus = canFocus; self.secure = secure
     }
     public static func normalized(_ controls: [Control], limit: Int = 60) -> [Control] {
@@ -103,6 +112,8 @@ public struct Observation: Codable, Sendable {
     public let pid: Int32, app: String, window: Rect
     public let controls: [Control], focusedID: String?, secureFocus: Bool, accessibilityIncomplete: Bool
     public let geometry: ImageGeometry, jpeg: Data, signature: [UInt8]
+    public var source: PerceptionSource = .visual
+    public var browser: BrowserContext?
     public var timings: [String: Double] = [:]
     public init(pid: Int32, app: String, window: Rect, controls: [Control], focusedID: String? = nil,
                 secureFocus: Bool = false, accessibilityIncomplete: Bool = false, geometry: ImageGeometry,
@@ -112,7 +123,15 @@ public struct Observation: Codable, Sendable {
         self.geometry = geometry; self.jpeg = jpeg; self.signature = signature
     }
     public func sameScene(as other: Observation) -> Bool {
-        guard pid == other.pid, window.near(other.window), signature.count == other.signature.count,
+        guard pid == other.pid, window.near(other.window), source == other.source else { return false }
+        if source != .visual {
+            guard controls == other.controls, focusedID == other.focusedID else { return false }
+            if let a = browser, let b = other.browser {
+                return a.tabID == b.tabID && a.documentID == b.documentID && a.url == b.url && a.title == b.title && a.text == b.text
+            }
+            return browser == nil && other.browser == nil
+        }
+        guard signature.count == other.signature.count,
               !signature.isEmpty else { return false }
         let differences = zip(signature,other.signature).map { abs(Int($0)-Int($1)) }
         let changed = differences.filter { $0 > 12 }.count
@@ -121,7 +140,7 @@ public struct Observation: Codable, Sendable {
 }
 
 public enum Operation: String, Codable, CaseIterable, Sendable {
-    case click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, wait, done, clarify, requestLanguage
+    case click, visualClick, focus, typeText, shortcut, scroll, openApp, openURL, openDownloads, selectOption, wait, done, clarify, requestLanguage, requestVision
 }
 public enum Shortcut: String, Codable, CaseIterable, Sendable {
     case newTab, previousTab, nextTab, back, forward, addressBar, enter, escape, closeTab

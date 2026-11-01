@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mac Voice Control Bridge",
+  "version": "0.1.0",
+  "description": "Permission-scoped semantic browser control for Mac Voice Control.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5FwV+VLmsYt+ODBr/aElABsO/XGE4sltZ37fTWrqF+RdvYARCsF9rxdNIjyb3oj5CwGfmRLTEjTexQxS0xQthidBdNYQicsFE5PyfuLCbtOKOVSUN1ufCWpa+sfPRt+9Buab+8SteTGoC1HSNpCk+sLs/Rdu6Zpv9OLS+m+ZqpDqFrMAjoIXE0jdOoZt6Q/OB2DpV+k+yTQLObcu6YxqsHQcHqqKGa1gN+553qUncgajjPHs541lG77ZeFY1Ucd/+SXh2O3/I8QfTTSfDp0esddC3Ng/2hCDmP81+XsAyFwZXkfMUD4UgXGxibMepOmb4rlAfGDQH7Xq0YbPBjFJdwIDAQAB",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "nativeMessaging",
+    "storage"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

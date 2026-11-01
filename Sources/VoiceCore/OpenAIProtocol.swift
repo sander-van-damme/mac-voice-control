@@ -18,7 +18,7 @@ public enum OpenAIProtocol {
             context["screenshot_geometry"] = try JSONSerialization.jsonObject(with:JSONEncoder().encode(o.geometry))
         }
         var input: [[String:Any]] = [["type":"input_text","text":String(decoding:try JSONSerialization.data(withJSONObject:context,options:.sortedKeys),as:UTF8.self)]]
-        if request.includeScreen {
+        if request.includeScreen && !o.jpeg.isEmpty {
             guard o.jpeg.count < 4_000_000 else { throw VoiceError("Screen context is too large.") }
             input.append(["type":"input_image","image_url":"data:image/jpeg;base64,"+o.jpeg.base64EncodedString()])
         }

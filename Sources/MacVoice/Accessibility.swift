@@ -9,6 +9,7 @@ struct AXSnapshot {
     var visualWindow: VisibleWindow? = nil
     let controls: [Control], references: [String: AXUIElement]
     let focusedID: String?, secureFocus: Bool, secureRegions: [Rect], incomplete: Bool
+    var focusedValue: String? = nil
 }
 
 /// AX is synchronous IPC. Keep bounded traversal off the UI thread.
@@ -50,6 +51,15 @@ final class AccessibilityReader: @unchecked Sendable {
         var names: CFArray?
         guard AXUIElementCopyActionNames(element,&names) == .success else { return [] }
         return names as? [String] ?? []
+    }
+    static func safeFocusedValue(_ element: AXUIElement) -> String? {
+        guard !secure(element), let value = attribute(element,kAXValueAttribute) as? String, value.utf16.count <= 20_000 else { return nil }
+        return value // Private freshness data; never included in Observation or logs.
+    }
+    static func hasInsertionPoint(_ element: AXUIElement) -> Bool {
+        guard let value = attribute(element,kAXSelectedTextRangeAttribute), CFGetTypeID(value) == AXValueGetTypeID() else { return false }
+        var range = CFRange(location:0,length:0)
+        return AXValueGetValue(unsafeBitCast(value,to:AXValue.self),.cfRange,&range) && range.length == 0
     }
     static func focusedWindow(_ pid: pid_t) -> AXUIElement? {
         let app = AXUIElementCreateApplication(pid)
@@ -109,7 +119,9 @@ final class AccessibilityReader: @unchecked Sendable {
             // Static text is supplementary evidence, not an executable target.
             let id = "e\(controls.count)"
             let control = Control(id:id,role:role,label:Self.label(node),frame:rect,
-                enabled:Self.attribute(node,kAXEnabledAttribute) as? Bool ?? true,canPress:press,canFocus:text)
+                enabled:Self.attribute(node,kAXEnabledAttribute) as? Bool ?? true,canPress:press,canFocus:text,
+                selected:Self.attribute(node,kAXSelectedAttribute) as? Bool,
+                checked:["AXCheckBox","AXRadioButton"].contains(role) ? (Self.attribute(node,kAXValueAttribute) as? NSNumber).map { $0.intValue != 0 } : nil)
             controls.append(control); refs[id] = node
             if let focused, CFEqual(focused,node) { focusedID = id }
         }
@@ -118,7 +130,7 @@ final class AccessibilityReader: @unchecked Sendable {
         if secureFocus, let focused, let rect = Self.frame(focused) { regions.append(rect) }
         return AXSnapshot(pid:pid,window:window,frame:frame,controls:controls,references:refs,
             focusedID:focusedID,secureFocus:secureFocus,secureRegions:regions,
-            incomplete:!nodes.isEmpty || (chromium && !webArea))
+            incomplete:!nodes.isEmpty || (chromium && !webArea),focusedValue:focused.flatMap(Self.safeFocusedValue))
     }
     private func intersects(_ a: Rect, _ b: Rect) -> Bool {
         a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y

@@ -2,10 +2,14 @@
 import PackageDescription
 
 var dependencies: [Package.Dependency] = []
-var products: [Product] = [.library(name: "VoiceCore", targets: ["VoiceCore"])]
+var products: [Product] = [.library(name: "VoiceCore", targets: ["VoiceCore"]),
+    .executable(name:"MacVoiceBrowserHost",targets:["MacVoiceBrowserHost"]),
+    .executable(name:"VoiceBenchmarks",targets:["VoiceBenchmarks"])]
 var targets: [Target] = [
     .systemLibrary(name: "CZlib", pkgConfig: "zlib"),
     .target(name: "VoiceCore", dependencies: ["CZlib"]),
+    .executableTarget(name:"MacVoiceBrowserHost",dependencies:["VoiceCore"]),
+    .executableTarget(name:"VoiceBenchmarks",dependencies:["VoiceCore"],path:"Benchmarks/VoiceBenchmarks"),
     .testTarget(name: "VoiceCoreTests", dependencies: ["VoiceCore"], resources: [.copy("Fixtures")])
 ]
 #if os(macOS)

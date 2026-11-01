@@ -124,7 +124,7 @@ public struct LanguageAction: Codable, Sendable {
             guard let scroll, scroll != 0, abs(scroll) <= 25 else { throw VoiceError("Invalid proposed scroll.") }
             result.scroll = scroll
         case .wait, .openDownloads: break
-        case .visualClick, .done, .clarify, .requestLanguage:
+        case .visualClick, .done, .clarify, .requestLanguage, .requestVision, .selectOption:
             throw VoiceError("That operation must be resolved by Jev or the user.")
         }
         return result

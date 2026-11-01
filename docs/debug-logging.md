@@ -44,3 +44,10 @@ A Codex-specific ZIP maximum could not be verified from those public documents. 
 Portable tests independently parse ZIP structures, decompress payloads, validate CRCs, and check opt-in behavior, rotation, retention, restart handling, overload reporting, sealing for sharing, and IO errors. The macOS test target includes an AAC round-trip test. Run `swift test --parallel` on an Apple Silicon Mac to compile the actual app and exercise AVFoundation.
 
 Manual check on macOS: enable logging, load speech, speak a command, exercise Jev and optional ChatGPT, confirm/cancel an action, and open the folder. Unzip a part and play an AAC snippet; correlate full ASR results and model objects with screenshots/actions. Disable and confirm the files stop changing. Test quit/relaunch and the same-folder Finder button with logging disabled.
+
+
+## Semantic-agent diagnostics
+
+`CommandMetrics` aggregates are separate from sensitive debug payloads and do not enable logging. Structured Jev payloads contain no image assets; visual requests and screenshots retain the existing opt-in archive policy. Browser observations may contain private visible text despite field-value exclusions. Native focused-field freshness values and browser value/caret guard data remain private in memory and are not serialized into observations.
+
+The browser mailbox is temporary, permission-restricted IPC rather than a diagnostic archive. It can briefly contain task instructions, text to insert and public page observations. Messages are deleted after consumption; crash remnants are removed on the next host run. Do not include the mailbox in log uploads. Performance stage timers can nest; use measured `task_completion_ms`, rather than adding all timers, for total latency.

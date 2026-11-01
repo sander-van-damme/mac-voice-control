@@ -264,3 +264,12 @@ Model assets are downloaded on demand by FluidAudio and are not distributed in t
 ## Other research sources
 
 The MIT projects jev-cua, jev-ultrafast, typesafe-computer-use, jev-voice-browser and TypeSafe public examples were reviewed. No source or fixtures from them are copied into this repository. Specific patterns and commit references are documented in docs/research.md.
+
+## Architectural research references (semantic agent slice)
+
+The design was informed by browser-use/jev-ultrafast (Browser Use),
+awlevin/typesafe-computer-use (Aaron Levin), SaarthurR/atticus-mac (SaarthurR),
+and HeyPace/pace (Farza), each declaring an MIT license at the reviewed revision.
+No source from these four references was incorporated in this slice. See
+`docs/semantic-agent-research.md` for inspected files and the implementation boundaries.
+Existing redistributed-source notices above remain applicable and unchanged.

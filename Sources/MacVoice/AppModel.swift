@@ -91,6 +91,14 @@ import VoiceCore
     @Published var consent = UserDefaults.standard.bool(forKey:"screenConsent") {
         didSet { UserDefaults.standard.set(consent,forKey:"screenConsent"); if !consent { stop() } }
     }
+    @Published var browserEnabled = UserDefaults.standard.bool(forKey:"browserEnabled") {
+        didSet { UserDefaults.standard.set(browserEnabled,forKey:"browserEnabled"); stop() }
+    }
+    func installBrowserBridge() {
+        stop()
+        do { try BrowserSetup.install(); message = "Chrome bridge registered. Load the extension folder in chrome://extensions, then allow each site from the extension popup." }
+        catch { message = error.localizedDescription }
+    }
     private let speech: SpeechProviding
     private var desktop: MacDesktop?
     private var loop: GoalLoop?
@@ -193,7 +201,7 @@ import VoiceCore
         guard ready else { setupVisible = true; message = "Complete Setup to start listening."; showSetup(); return }
         do {
             guard let key = try KeyStore.read(), !key.isEmpty else { throw VoiceError("Save your TypeSafe key first.") }
-            let desktop = MacDesktop(); self.desktop = desktop
+            let desktop = MacDesktop(browserEnabled:browserEnabled); self.desktop = desktop
             let keyForOpenAI = apiKeyAuth ? try OpenAIAPIKeyStore.read() : nil
             let helper: (any LanguageHelping)? = languageEnabled && (apiKeyAuth ? keyForOpenAI != nil : chatGPT.connected)
                 ? OpenAILanguageHelper(auth:chatGPT.auth,model:chatGPT.model,apiKey:keyForOpenAI) : nil
@@ -201,6 +209,10 @@ import VoiceCore
             let loop = GoalLoop(desktop:desktop,decider:JevClient(key:key),language:helper,
                 languageScreenContext:languageScreenContext); self.loop = loop
             loop.onEvent = { [weak self] event in self?.event(event) }
+            loop.onMetrics = { [weak self] metrics in
+                guard let self else { return }
+                self.timings.merge(metrics.timings) { _,new in new }
+            }
             speech.configurePushToTalk(voiceMode == .pushToTalk)
             try speech.start(); listening = true; phase = .listening
             setupVisible = false
@@ -273,10 +285,10 @@ import VoiceCore
         runTask = Task { [weak self] in
             guard let self, let loop else { return }
             do {
-                try await Task.sleep(nanoseconds:180_000_000)
+                try Task.checkCancellation()
                 try await loop.run(goal:goal,context:context)
                 guard epoch == run else { return }
-                phase = .listening; message = "Goal finished. " + voiceHint
+                phase = .listening; message += " " + voiceHint
             } catch is CancellationError { }
             catch { guard epoch == run else { return }; phase = .paused; message = error.localizedDescription; DebugLog.shared.event("session.error",["error":message]); showFeedback() }
             guard epoch == run else { return }
@@ -289,8 +301,8 @@ import VoiceCore
         runTask = Task { [weak self] in
             guard let self, let desktop else { return }
             do {
-                try await Task.sleep(nanoseconds:180_000_000)
-                let observation = try await desktop.observe()
+                try Task.checkCancellation()
+                let observation = try await desktop.observe(preference:.semantic)
                 guard let id = observation.focusedID, let control = observation.controls.first(where:{$0.id == id}), control.canFocus,
                       !observation.secureFocus else { throw VoiceError("Focus a non-secure text field before dictating.") }
                 var action = Action(.typeText,label:"Insert dictated text"); action.target = id; action.text = text
@@ -316,7 +328,8 @@ import VoiceCore
         } else { pendingImage = nil; pendingMarker = nil }
         timings.merge(event.timings) { _,new in new }; tokens += event.tokens; estimatedCost += event.cost
         if event.timings["command_to_first_action_ms"] != nil, let commandReceivedAt, let commandSpeechLatency {
-            timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (MonotonicTime.now-commandReceivedAt)*1000
+            timings["speech_end_to_first_action_ms"] = commandSpeechLatency + (event.timings["command_to_first_action_ms"] ?? 0)
+            _ = commandReceivedAt
         }
         showStatus()
     }

@@ -1,0 +1,22 @@
+[
+  {"id":1,"scenario":"Open Chrome","automated":"VoiceBenchmarks: mock native dispatch, ten runs","manual":"Launch and foreground on macOS"},
+  {"id":2,"scenario":"Open Finder","automated":"VoiceBenchmarks: mock native dispatch, ten runs","manual":"Launch and foreground on macOS"},
+  {"id":3,"scenario":"Open Downloads","automated":"VoiceBenchmarks: mock native dispatch, ten runs","manual":"Verify folder identity on macOS"},
+  {"id":4,"scenario":"Create browser tab","automated":"VoiceBenchmarks: mock native dispatch, ten runs","manual":"Chrome tab identity"},
+  {"id":5,"scenario":"Navigate explicit URL","automated":"Mock native dispatch and real Chromium DOM workflow","manual":"Normal Chrome profile and Native Messaging"},
+  {"id":6,"scenario":"Open website and search","automated":"Real Chromium isolated DOM plus production GoalLoop; mocked Jev and Chrome API transport"},
+  {"id":7,"scenario":"Search and open correct result","automated":"Real Chromium newsletter workflow"},
+  {"id":8,"scenario":"Navigate using a website link","automated":"Real Chromium newsletter workflow"},
+  {"id":9,"scenario":"Fill multiple fields","automated":"One text field and dropdown exercised separately","manual":"Multiple dependent text fields and replacement"},
+  {"id":10,"scenario":"Find newest dated result","automated":"Real Chromium workflow plus missing/tied-date unit tests"},
+  {"id":11,"scenario":"Finder folder navigation","manual":"Real macOS required"},
+  {"id":12,"scenario":"Find file by description","manual":"Real macOS required; general goal loop only"},
+  {"id":13,"scenario":"Switch apps and AX control","automated":"Native source syntax parsed","manual":"Apple Silicon compilation and real AX required"},
+  {"id":14,"scenario":"Control absent from AX","automated":"Existing visual geometry and freshness unit tests","manual":"Real screen capture and Jev vision required"},
+  {"id":15,"scenario":"Canvas interaction","automated":"Browser fixture flags canvas as unsupported","manual":"Real visual fallback required"},
+  {"id":16,"scenario":"Spoken multistep goal","automated":"Planner and execution tested after transcription boundary","manual":"Parakeet audio and real UI required"},
+  {"id":17,"scenario":"Literal dictation","automated":"Literal routing and real DOM insertion tested","manual":"Speech accuracy and native insertion required"},
+  {"id":18,"scenario":"Interrupt executing goal","automated":"Generation/cancellation and DOM expired/cancelled command rejection","manual":"Spoken Stop and in-flight native IPC"},
+  {"id":19,"scenario":"Correct mistaken target","automated":"Existing correction memory and identity tests","manual":"Live spoken correction"},
+  {"id":20,"scenario":"Mixed Dutch and English","automated":"Existing bilingual corpus and new direct grammar tests","manual":"Code-switching recognition accuracy"}
+]
